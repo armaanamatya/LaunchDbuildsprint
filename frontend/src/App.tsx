@@ -1,45 +1,60 @@
-import { startTransition, useEffect } from "react";
+import { startTransition, useEffect, useState } from "react";
+import { ComparePanel } from "./components/ComparePanel";
+import { ConnectionIndicator } from "./components/ConnectionIndicator";
+import { CreateBranchModal } from "./components/CreateBranchModal";
+import { DetailPanel } from "./components/DetailPanel";
+import { EmptyStateCTA } from "./components/EmptyStateCTA";
 import { GraphView } from "./components/GraphView";
-import { StatusBadge } from "./components/StatusBadge";
 import { Toolbar } from "./components/Toolbar";
+import { ToastHost } from "./components/Toast";
+import { useGraphSSE } from "./hooks/useGraphSSE";
 import { useGraphStore } from "./store/graphStore";
 
-function formatTimestamp(value: string) {
-  const date = new Date(value);
+const HERO_PROMPT = `Add rate limiting to POST /api/login in the demo repo.
 
-  if (Number.isNaN(date.getTime())) {
-    return "Awaiting activity";
-  }
+Requirements:
+- Max 5 attempts per IP within a 60-second sliding window.
+- Return HTTP 429 with a Retry-After header when exceeded.
+- Successful logins must count toward the limit (prevent enumeration).
+- The limit applies per-IP regardless of email (prevent email rotation bypass).
 
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
-}
-
-function compactPath(path: string) {
-  const segments = path.split(/[/\\]+/).filter(Boolean);
-
-  if (segments.length <= 3) {
-    return path;
-  }
-
-  return `.../${segments.slice(-3).join("/")}`;
-}
+Make the four failing tests in tests/test_rate_limit.py pass without breaking tests/test_login.py.`;
 
 export function App() {
-  const { graph, selectedNodeId, isLoading, loadGraph, selectNode, addDraftBranch } =
-    useGraphStore();
+  const graph = useGraphStore((s) => s.graph);
+  const selectedNodeId = useGraphStore((s) => s.selectedNodeId);
+  const loadGraph = useGraphStore((s) => s.loadGraph);
+  const selectNode = useGraphStore((s) => s.selectNode);
+  const createBranch = useGraphStore((s) => s.createBranch);
+  const openCompare = useGraphStore((s) => s.openCompare);
+  const resetDemo = useGraphStore((s) => s.resetDemo);
+
+  const [createOpen, setCreateOpen] = useState(false);
+
+  const handleCreate = async (label: string, prompt: string) => {
+    await createBranch(label, prompt);
+  };
+
+  const handleQuickStart = async () => {
+    for (let i = 1; i <= 3; i += 1) {
+      await createBranch(`Approach ${i}`, HERO_PROMPT);
+    }
+  };
+
+  useGraphSSE();
+
+  const branchCount = graph.nodes.filter((n) => n.parent_id !== null).length;
+  const isEmpty = branchCount === 0;
   const selectedNode =
     graph.nodes.find((node) => node.id === selectedNodeId) ?? graph.nodes[0];
+  const showDetailPanel = !isEmpty && selectedNode && selectedNode.parent_id !== null;
   const activeNodeCount = graph.nodes.filter(
     (node) => node.status === "queued" || node.status === "running",
   ).length;
   const completedNodeCount = graph.nodes.filter(
     (node) => node.status === "completed" || node.status === "merged",
   ).length;
+  const branchesLabel = `${branchCount} ${branchCount === 1 ? "branch" : "branches"}`;
 
   useEffect(() => {
     startTransition(() => {
@@ -50,99 +65,74 @@ export function App() {
   return (
     <div className="min-h-screen bg-[#050607] text-white">
       <main className="relative min-h-screen overflow-hidden">
-        <GraphView
-          graph={graph}
-          selectedNodeId={selectedNodeId}
-          onSelectNode={selectNode}
-        />
+        {isEmpty ? (
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_38%,rgba(255,186,92,0.08),transparent_55%),linear-gradient(180deg,#050607,#050607)]" />
+        ) : (
+          <GraphView
+            graph={graph}
+            selectedNodeId={selectedNodeId}
+            onSelectNode={selectNode}
+          />
+        )}
 
         <div className="pointer-events-none absolute inset-x-0 top-0 z-20 p-4 sm:p-6">
           <div className="flex items-start justify-between gap-3">
-            <div className="pointer-events-auto max-w-xl">
-              <Toolbar baseBranch={graph.base_branch} onCreateBranch={addDraftBranch} />
+            <div className="pointer-events-auto min-w-0 flex-1">
+              <Toolbar
+                baseBranch={graph.base_branch}
+                onOpenCreate={() => setCreateOpen(true)}
+                onQuickStart={handleQuickStart}
+                onOpenCompare={openCompare}
+                onReset={() => void resetDemo()}
+                canCompare={completedNodeCount >= 2}
+                showAdvancedActions={!isEmpty}
+              />
             </div>
-            <div className="pointer-events-auto hidden items-center gap-2 md:flex">
-              <div className="rounded-full border border-white/10 bg-black/35 px-3 py-2 text-[11px] font-medium text-white/70 backdrop-blur-xl">
-                {graph.nodes.length} branches in view
-              </div>
-              <div className="rounded-full border border-white/10 bg-black/35 px-3 py-2 text-[11px] font-medium text-white/70 backdrop-blur-xl">
-                {activeNodeCount} active
-              </div>
-              <div className="rounded-full border border-white/10 bg-black/35 px-3 py-2 text-[11px] font-medium text-white/70 backdrop-blur-xl">
-                {completedNodeCount} ready to compare
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 p-4 sm:p-6">
-          <div className="flex justify-end">
-            <aside className="pointer-events-auto w-full max-w-[22rem] rounded-[2rem] border border-white/10 bg-[#0d0f11]/88 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.48)] backdrop-blur-2xl">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/35">
-                Selected branch
-              </p>
-              {selectedNode ? (
-                <div className="mt-4 space-y-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <h1 className="font-display text-[1.7rem] font-semibold tracking-[-0.03em] text-white">
-                        {selectedNode.label}
-                      </h1>
-                      <p className="mt-1 truncate text-sm text-white/45">
-                        {selectedNode.branch_name}
-                      </p>
-                    </div>
-                    <StatusBadge status={selectedNode.status} />
-                  </div>
-
-                  <p className="text-sm leading-6 text-white/72">
-                    {selectedNode.prompt ??
-                      selectedNode.summary ??
-                      "Prepared for a new implementation path from the base branch."}
-                  </p>
-
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/35">
-                        Worktree
-                      </p>
-                      <p className="mt-2 break-all text-sm leading-6 text-white/72">
-                        {compactPath(selectedNode.worktree_path)}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/35">
-                        Last update
-                      </p>
-                      <p className="mt-2 text-sm leading-6 text-white/72">
-                        {formatTimestamp(selectedNode.updated_at)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] p-4">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/35">
-                      Why this view
-                    </p>
-                    <p className="mt-2 text-sm leading-6 text-white/62">
-                      The canvas stays primary while branch detail appears only when it helps
-                      decide between implementation paths.
-                    </p>
-                    <p className="mt-3 text-sm leading-6 text-white/72">
-                      {isLoading
-                        ? "Syncing the latest graph snapshot from the backend."
-                        : selectedNode.summary ??
-                          "Node contract is live and ready for worktree lifecycle, logs, diffs, and merge flow."}
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <p className="mt-4 text-sm text-white/55">No branch selected.</p>
+            <div className="pointer-events-auto hidden shrink-0 items-center gap-2 md:flex">
+              <ConnectionIndicator />
+              {!isEmpty && (
+                <>
+                  <Stat>{branchesLabel} in view</Stat>
+                  <Stat>{activeNodeCount} active</Stat>
+                  <Stat>{completedNodeCount} ready to compare</Stat>
+                </>
               )}
-            </aside>
+            </div>
           </div>
         </div>
+
+        {isEmpty && (
+          <EmptyStateCTA
+            onQuickStart={handleQuickStart}
+            onCreate={() => setCreateOpen(true)}
+          />
+        )}
+
+        {showDetailPanel && selectedNode && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 p-4 sm:p-6">
+            <div className="flex justify-end">
+              <DetailPanel node={selectedNode} />
+            </div>
+          </div>
+        )}
+
+        <CreateBranchModal
+          open={createOpen}
+          defaultPrompt={HERO_PROMPT}
+          onSubmit={handleCreate}
+          onClose={() => setCreateOpen(false)}
+        />
+        <ComparePanel />
+        <ToastHost />
       </main>
+    </div>
+  );
+}
+
+function Stat({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-full border border-white/10 bg-black/35 px-3 py-2 text-[11px] font-medium text-white/70 backdrop-blur-xl">
+      {children}
     </div>
   );
 }
