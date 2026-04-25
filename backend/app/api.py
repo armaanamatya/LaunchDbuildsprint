@@ -458,19 +458,12 @@ async def demo_reset() -> DemoResetResponse:
     except FileNotFoundError:
         pass
 
-    for branch_name in _list_agent_branches(repo_path):
-        try:
-            _git(repo_path, ["branch", "-D", branch_name])
-            if branch_name not in removed_branch_names:
-                removed_branches += 1
-                removed_branch_names.add(branch_name)
-        except subprocess.CalledProcessError as exc:
-            logger.warning("demo.reset stale branch cleanup failed for %s: %s", branch_name, exc.stderr)
-
     # Hard-reset the demo repo to the stored hero-task baseline.
     demo_repo_reset = False
     try:
-        _git(repo_path, ["checkout", settings.base_branch])
+        # Clean before checkout so untracked files cannot block branch restore.
+        _git(repo_path, ["clean", "-fd"])
+        _git(repo_path, ["checkout", "-f", settings.base_branch])
         _git(repo_path, ["reset", "--hard", baseline_ref])
         _git(repo_path, ["clean", "-fd"])
         # Re-seed the SQLite database via the demo repo's reset script
@@ -496,6 +489,15 @@ async def demo_reset() -> DemoResetResponse:
         demo_repo_reset = True
     except subprocess.CalledProcessError as exc:
         logger.warning("demo.reset hard reset failed: %s", exc.stderr)
+
+    for branch_name in _list_agent_branches(repo_path):
+        try:
+            _git(repo_path, ["branch", "-D", branch_name])
+            if branch_name not in removed_branch_names:
+                removed_branches += 1
+                removed_branch_names.add(branch_name)
+        except subprocess.CalledProcessError as exc:
+            logger.warning("demo.reset stale branch cleanup failed for %s: %s", branch_name, exc.stderr)
 
     await graph_state.reset_to_root()
 

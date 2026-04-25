@@ -170,6 +170,20 @@ async def test_demo_reset_sweeps_stale_agent_branches_after_restart(
     assert _git_stdout(["branch", "--list", "agent/*"], isolated_backend).strip() == ""
 
 
+async def test_demo_reset_sweeps_agent_branch_checked_out_in_main_worktree(
+    isolated_backend: Path,
+) -> None:
+    _git(["branch", "agent/manual"], isolated_backend)
+    _git(["checkout", "agent/manual"], isolated_backend)
+
+    async with _client() as client:
+        reset = await client.post("/api/v1/demo/reset")
+    assert reset.status_code == 200, reset.text
+
+    assert _git_stdout(["branch", "--show-current"], isolated_backend).strip() == "main"
+    assert _git_stdout(["branch", "--list", "agent/*"], isolated_backend).strip() == ""
+
+
 # ── idempotency ────────────────────────────────────────────────────────────────
 
 

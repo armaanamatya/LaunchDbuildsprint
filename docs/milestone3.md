@@ -29,8 +29,8 @@
 | Method | Path | Purpose |
 |---|---|---|
 | `POST` | `/api/v1/branches/triple` | Spawn 3 sibling agent branches (one per strategy); auto-runs by default. Preflight refuses when `enable_real_runs=true` without `ANTHROPIC_API_KEY` and `auto_run=true`. |
-| `POST` | `/api/v1/demo/reset` | Cancel running tasks, remove every agent worktree + `agent/*` branch, hard-reset demo repo, re-seed via `scripts/reset_demo.py`, clear in-memory graph back to root. Emits `demo.reset` event. |
-| `GET`  | `/api/v1/demo/status` | One-call readiness probe. `ready=true` only when demo-repo is clean, `enable_real_runs` either off or has a key, and there are zero active worktrees and zero running tasks. Never includes the API key value. |
+| `POST` | `/api/v1/demo/reset` | Cancel running tasks, remove agent worktrees, sweep durable `agent/*` branches, restore the configured base branch to the stored demo baseline ref, clean untracked dirt, re-seed via `scripts/reset_demo.py`, clear in-memory graph back to root. Emits `demo.reset` event. |
+| `GET`  | `/api/v1/demo/status` | One-call readiness probe. `ready=true` only when demo-repo is clean, `enable_real_runs` either off or has a key, eval either off or has `uv` on `PATH`, and there are zero active worktrees and zero running tasks. Never includes the API key value. |
 
 ### New event types (`app/models.py`)
 
@@ -50,6 +50,7 @@
 | Key | Default | Purpose |
 |---|---|---|
 | `AGENT_GRAPH_ENABLE_EVAL` | `true` | Run `pytest tests/test_rate_limit.py` after `agent_completed`; emit `node.eval_ready`. |
+| `AGENT_GRAPH_DEMO_BASELINE_REF` | `refs/agent-graph/demo-baseline` | Persistent ref used by `/demo/reset` to restore the hero-task baseline after a merge. |
 
 (Existing keys unchanged.)
 
@@ -99,7 +100,7 @@ curl -s -X POST http://127.0.0.1:8000/api/v1/nodes/$NODE/merge | jq
 
 ```bash
 curl -s -X POST http://127.0.0.1:8000/api/v1/demo/reset | jq
-# Returns counts of cleaned worktrees/branches; in-memory graph restored to root
+# Returns counts of cleaned worktrees/branches; base branch and graph restored
 ```
 
 ---
@@ -111,8 +112,8 @@ cd backend
 uv run pytest -v
 ```
 
-Expected: **66 passed** (plus the gated Claude smoke test which is skipped
-unless `ANTHROPIC_API_KEY` AND `AGENT_GRAPH_RUN_REAL_SMOKE` are both set).
+Expected: **75 passed, 1 skipped** (the “1 skipped” is the gated Claude smoke
+test unless `ANTHROPIC_API_KEY` AND `AGENT_GRAPH_RUN_REAL_SMOKE` are both set).
 
 Real Claude smoke (optional):
 
@@ -130,11 +131,12 @@ ANTHROPIC_API_KEY=sk-... AGENT_GRAPH_RUN_REAL_SMOKE=1 \
 - [x] `POST /branches/triple` returns 3 nodes (one per strategy), correctly
       handles `auto_run=true|false`, partial-failure resilience preserved
       (`tests/test_branch_triple.py`).
-- [x] `POST /demo/reset` cleans worktrees + branches + working tree,
-      idempotent, fails fast on missing demo repo (`tests/test_demo_reset.py`).
+- [x] `POST /demo/reset` restores the stored baseline ref, cleans untracked
+      dirt, removes stale durable `agent/*` branches, is idempotent, and fails
+      fast on missing demo repo (`tests/test_demo_reset.py`).
 - [x] `GET /demo/status` reports `ready=true` only on a fresh, key-aligned,
-      zero-worktree, zero-running-task backend; never leaks the API key
-      value (`tests/test_demo_status.py`).
+      eval-capable, zero-worktree, zero-running-task backend; never leaks the
+      API key value (`tests/test_demo_status.py`).
 - [x] Worktree create refuses on dirty parent repo, allows linked worktrees
       to coexist, surfaces `/api/v1/demo/reset` on branch collisions
       (`tests/test_worktree_service.py`).

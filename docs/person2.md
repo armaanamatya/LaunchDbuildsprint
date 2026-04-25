@@ -1,6 +1,6 @@
 # Person 2 Final Handoff
 
-Updated: 2026-04-25 16:44:49 CDT (-0500)
+Updated: 2026-04-25 16:53:28 CDT (-0500)
 
 Audience: users, demo operators, and future agents working on the Person 2
 backend/git/agent-runtime slice.
@@ -24,8 +24,8 @@ as backend contract sync, so treat that as a coordination item with Person 3.
 | Claude strategy prompts | Claude runner receives strategy-specific system prompt bias. | `backend/app/agent_runner/claude_runner.py`, `backend/app/agent_runner/prompts.py` |
 | Branch x3 endpoint | `POST /api/v1/branches/triple` creates three sibling nodes, one per strategy, and can auto-run them. | `backend/app/api.py` |
 | Run preflight | Real-run endpoints refuse auto-run without `ANTHROPIC_API_KEY` when `AGENT_GRAPH_ENABLE_REAL_RUNS=true`. | `backend/app/api.py`, `backend/app/settings.py` |
-| Demo reset | `POST /api/v1/demo/reset` cancels runs, removes known worktrees/branches, prunes worktrees, resets repo state, reseeds demo DB, clears graph state. | `backend/app/api.py`, `backend/app/state.py`, `backend/app/task_manager.py` |
-| Demo status | `GET /api/v1/demo/status` reports one-call readiness: repo presence, git state, dirtiness, worktrees, API key presence, eval/uv, running tasks, issues. | `backend/app/api.py`, `backend/app/models.py` |
+| Demo reset | `POST /api/v1/demo/reset` cancels runs, removes worktrees, sweeps all durable `agent/*` branches, resets base branch to stored baseline ref, cleans untracked dirt, reseeds demo DB, clears graph state. | `backend/app/api.py`, `backend/app/state.py`, `backend/app/task_manager.py` |
+| Demo status | `GET /api/v1/demo/status` reports one-call readiness: repo presence, git state, dirtiness, worktrees, API key presence, eval/uv readiness, running tasks, issues. | `backend/app/api.py`, `backend/app/models.py` |
 | Eval | After `agent.completed`, backend can run `uv run pytest tests/test_rate_limit.py` and emit `node.eval_ready`. | `backend/app/task_manager.py`, `backend/app/settings.py` |
 | Cancellation reasons | Cancels publish `agent.failed` with a caller-specific reason and `cancelled: true`. | `backend/app/task_manager.py`, `backend/app/api.py` |
 | Audit log | Agent events are written to `<worktree>/.agent-graph/trace.jsonl`, best effort. | `backend/app/services/audit_log.py`, `backend/app/task_manager.py` |
@@ -41,7 +41,7 @@ as backend contract sync, so treat that as a coordination item with Person 3.
 | `POST` | `/api/v1/nodes/{id}/run` | Starts one node run unless root/running/invalid state. Requires key only when real runs are enabled. |
 | `GET` | `/api/v1/nodes/{id}/diff` | Returns full diff plus `has_changes`. |
 | `POST` | `/api/v1/nodes/{id}/merge` | Merges selected agent branch into configured base branch. |
-| `POST` | `/api/v1/demo/reset` | Canonical rehearsal reset path. See open blockers below before relying on it as fully baseline-restoring. |
+| `POST` | `/api/v1/demo/reset` | Canonical rehearsal reset path. Restores the configured base branch to the stored demo baseline ref and removes both tracked and untracked rehearsal dirt. |
 | `GET` | `/api/v1/demo/status` | Readiness probe. Never returns the API key value. |
 | `GET` | `/api/v1/graph/sse` | Global SSE stream for graph and agent events. |
 | `GET` | `/api/v1/nodes/{id}/sse` | Node-filtered SSE stream plus heartbeats. |
@@ -77,7 +77,13 @@ New or expanded event types:
 | `AGENT_GRAPH_ENABLE_EVAL` | `true` | Run rate-limit pytest eval after completion. |
 | `AGENT_GRAPH_DEMO_REPO_PATH` | auto-detect `demo-repo` | Demo repo root. |
 | `AGENT_GRAPH_BASE_BRANCH` | `main` | Base branch for worktrees, diffs, merges, reset. |
+| `AGENT_GRAPH_DEMO_BASELINE_REF` | `refs/agent-graph/demo-baseline` | Internal ref used by reset to restore the hero-task baseline after a merge. |
 | `AGENT_GRAPH_WORKTREE_DIR` | `.agent-worktrees` | Worktree directory under demo repo. |
+
+Baseline note: the ref is initialized before backend-managed branch creation or
+merge. If an existing repo was already polluted before the ref existed,
+recreate the demo repo or repoint `AGENT_GRAPH_DEMO_BASELINE_REF` to the clean
+hero-task commit.
 
 ## Tests Added Or Expanded
 
@@ -85,8 +91,8 @@ New or expanded event types:
 |---|---|---|
 | P2-A | `backend/tests/test_mock_strategies.py` | Three mock strategies patch real demo repo copies, parse, stay idempotent, and pass rate-limit tests. |
 | P2-B | `backend/tests/test_branch_triple.py` | Branch x3 happy path, auto-run events, 404, key preflight, partial worktree failure. |
-| P2-C | `backend/tests/test_demo_reset.py` | Reset removes in-memory nodes, configured worktree root, agent branches, and leaves repo clean in normal in-memory case. |
-| P2-D | `backend/tests/test_demo_status.py` | Ready state, dirty repo, leaked worktrees, missing key, key masking. |
+| P2-C | `backend/tests/test_demo_reset.py` | Reset removes in-memory nodes, configured worktree root, stale durable/current agent branches, untracked dirt, and restores the stored baseline after `main` moves. |
+| P2-D | `backend/tests/test_demo_status.py` | Ready state, dirty repo, leaked worktrees, missing key, missing `uv` when eval is enabled, key masking. |
 | P2-E | `backend/tests/test_worktree_service.py` | Dirty repo guard, linked-worktree exclusion, branch collision guidance, diff summary. |
 | P2-F | `backend/tests/test_task_manager_cancellation.py` | Cancellation reason reaches `agent.failed`. |
 | P2-G | `backend/tests/test_audit_log.py` | JSONL trace file exists, parses, and records terminal event. |
@@ -117,26 +123,21 @@ uv run pytest -v
 `tests/test_claude_runner_smoke.py` is expected to skip unless both
 `ANTHROPIC_API_KEY` and `AGENT_GRAPH_RUN_REAL_SMOKE` are set.
 
-## Current Review Blockers To Resolve Before Demo/Merge
+## Review Items Resolved
 
-These came from the latest code review and should be fixed before treating
-Person 2 as complete:
+The latest reset/readiness review items are covered by code and tests:
 
-1. P1 - `/api/v1/demo/reset` currently resets to current `main`, not a stored
-   hero-task baseline. After merging a winner, reset can leave rate limiting
-   on the base branch.
+1. Reset targets the stored baseline ref (`refs/agent-graph/demo-baseline` by
+   default), not current `main`.
 
-2. P2 - `/api/v1/demo/reset` uses `git reset --hard`, which does not remove
-   untracked files. Status and worktree preflight can keep reporting dirty
-   state after a "successful" reset.
+2. Reset runs `git clean -fd` after `git reset --hard <baseline>`, so
+   untracked non-ignored dirt is removed.
 
-3. P2 - `/api/v1/demo/status` adds an issue when eval is enabled and `uv` is
-   missing, but `ready` can still be true because the predicate does not check
-   `uv_on_path`.
+3. `/api/v1/demo/status` returns `ready=false` when eval is enabled and `uv`
+   is not on `PATH`.
 
-4. P2 - `/api/v1/demo/reset` deletes branches known to in-memory graph state,
-   but after a backend restart stale durable `agent/*` branches can remain.
-   Reset should sweep git refs as well as RAM state.
+4. Reset sweeps durable `agent/*` branches from git even if `graph_state` was
+   lost after a backend restart.
 
 ## Workspace Hygiene Notes
 

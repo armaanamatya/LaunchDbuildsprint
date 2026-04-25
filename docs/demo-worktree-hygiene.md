@@ -9,7 +9,7 @@
 
 Each graph child node is a **real git worktree** plus an **`agent/*` branch** on the demo repository. Rehearsals that stop mid-flight, skip cleanup, or **merge a winner** leave **durable** git state: extra directories, branch refs, and often a different **`main`**. The next “fresh” demo is then **not** starting from the same world as the first — compare/diff/merge and the hero-task story break or confuse.
 
-**Contract:** A full run or rehearsal **begins** with `POST /api/v1/demo/reset` (or equivalent runbook that invokes it). No reset between runs = high risk; reset every time = boring and reliable.
+**Contract:** A full run or rehearsal **begins** with `POST /api/v1/demo/reset` (or equivalent runbook that invokes it). Reset restores the configured base branch to `AGENT_GRAPH_DEMO_BASELINE_REF`, cleans untracked dirt, and removes stale `agent/*` refs even after an API restart. No reset between runs = high risk; reset every time = boring and reliable.
 
 ---
 
@@ -21,7 +21,7 @@ Think of the demo as writing on a **shared whiteboard** (the `demo-repo`).
 - If you run the story once and then start again **without erasing the board**, you are not looking at a clean “chapter 1” — you are looking at “chapter 1 plus whatever is still there.”
 - Merging a winner is like **copying a lane into the main line**; the main line is no longer the same starting line for the next performance.
 
-**The “elegant” fix is not more clever branching.** It is: **one button** that **erases the board and restores the official opening state** before each full rehearsal. In this codebase, that button is the **demo reset** endpoint, which clears disk, git, in-memory graph, and re-seeds the demo app data.
+**The “elegant” fix is not more clever branching.** It is: **one button** that **erases the board and restores the official opening state** before each full rehearsal. In this codebase, that button is the **demo reset** endpoint, which clears disk, git, in-memory graph, and re-seeds the demo app data from the stored baseline ref.
 
 ---
 
@@ -47,7 +47,7 @@ Think of the demo as writing on a **shared whiteboard** (the `demo-repo`).
 
 - **P2-style “dirty repo” preflight** before `git worktree add`: fail fast with a message that points to reset — good **when** someone skipped reset; does not replace **doing** the reset.
 - **Idempotent** `POST /api/v1/demo/reset`: safe to run twice; supports “reset is the default, not the exception.”
-- **Optional** `GET /api/v1/demo/status` (where implemented): single place to answer “is this host ready to demo?” (clean base, worktree count, key flags).
+- **Optional** `GET /api/v1/demo/status` (where implemented): single place to answer “is this host ready to demo?” (clean base, worktree count, key flags, eval/`uv` readiness).
 
 ---
 
@@ -60,13 +60,13 @@ Think of the demo as writing on a **shared whiteboard** (the `demo-repo`).
 | Rule | Rationale |
 |------|-----------|
 | **Every full end-to-end rehearsal** starts with `POST /api/v1/demo/reset` | Restores a single, known baseline: git, disk, in-memory graph, seed data. |
-| **After any merge** you intend to undo for the *next* story** | Reset (or you explicitly accept a new baseline and change the script). |
+| **After any merge** you intend to undo for the next story | Reset (or explicitly accept a new baseline and update `AGENT_GRAPH_DEMO_BASELINE_REF`). |
 | **Never assume** “the UI is empty” implies “the repo is clean” | **Git is durable;** the API process is not. |
 
 ### 4.2 What “reset” must cover (completeness)
 
 1. **Process:** cancel or drain in-flight agent tasks so nothing writes mid-teardown.  
-2. **Git + disk:** remove non-base worktrees, delete `agent/*` branches, prune, hard-reset the demo repository to the baseline commit on the configured base branch.  
+2. **Git + disk:** remove non-base worktrees, sweep all `agent/*` branches from git, prune, restore the configured base branch to `AGENT_GRAPH_DEMO_BASELINE_REF`, and run `git clean -fd` for untracked rehearsal dirt.  
 3. **Data:** run the repo’s `scripts/reset_demo.py` (or equivalent) so app state (e.g. DB) matches the story.  
 4. **Session:** graph state back to **root only** so UI and server agree.
 
@@ -77,6 +77,7 @@ If any step is missing, the next run is *partially* fresh — the worst class of
 - **Runbook:** one line, e.g. `curl -fsS -X POST http://127.0.0.1:8000/api/v1/demo/reset` before “open browser, click Branch×3.”
 - **CI / smoke:** optional check that `demo/status` (if used) is green or that reset returns success after a synthetic dirty state.
 - **On-call language:** if `create_worktree` or a run fails with “dirty / collision / weird git,” the first **support** step is **reset**, not ad-hoc `rm -rf` in `.agent-worktrees` (unless the runbook says so in emergency, and you understand git’s view).
+- **Baseline caveat:** the baseline ref is created before backend-managed branch/merge operations. If a repo was already polluted before that ref existed, recreate the demo repo or explicitly repoint `AGENT_GRAPH_DEMO_BASELINE_REF` to the intended clean commit.
 
 ### 4.4 What we are *not* doing
 
@@ -88,7 +89,7 @@ If any step is missing, the next run is *partially* fresh — the worst class of
 ## 5. Cross-references in this repository
 
 - Risk row and mitigation: `analysis.md` §6 (worktree leaked… / `POST /api/v1/demo/reset`).
-- Reset endpoint spec: `analysis.md` §4.2 item 9; implementation notes in `docs/plan-personB.md` (P2-C, P2-E).
+- Reset endpoint spec: `analysis.md` §4.2 item 9; implementation notes in `docs/person2.md` and `docs/plan-personB.md` (P2-C, P2-E).
 - Implementation: `backend/app/api.py` — `demo_reset`; `backend/app/services/worktree_service.py` — worktree create/delete.
 - Rehearsal habit: `analysis.md` §7 (reset between each rehearsal in the final stretch list).
 
