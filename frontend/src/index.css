@@ -3,77 +3,77 @@
 @tailwind utilities;
 
 :root {
-  --color-paper: #111315;
-  --color-ink: #f5f7fa;
-  --color-accent: #f7b955;
-  --color-muted: rgba(255, 255, 255, 0.56);
-  --color-line: rgba(255, 255, 255, 0.1);
-  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --color-paper: #f5f1e8;
+  --color-paper-deep: #ede8db;
+  --color-surface: #fefdfa;
+  --color-surface-raised: #ffffff;
+  --color-ink: #1a1a1d;
+  --color-ink-muted: #6b6960;
+  --color-ink-soft: #9a9890;
+  --color-line: rgba(26, 26, 29, 0.10);
+  --color-line-strong: rgba(26, 26, 29, 0.22);
+  --color-accent: #d8492e;
+  --color-accent-strong: #b8391f;
+  --color-accent-soft: rgba(216, 73, 46, 0.10);
+  --color-success: #4f7942;
+  --color-success-soft: rgba(79, 121, 66, 0.10);
+  --color-danger: #a02e2e;
+  --color-danger-soft: rgba(160, 46, 46, 0.10);
+
+  --strategy-route-local: #2f5e80;
+  --strategy-dependency: #6b6960;
+  --strategy-middleware: #8b6f47;
+
+  font-family: "Inter", system-ui, sans-serif;
   color: var(--color-ink);
-  background: #050607;
-  color-scheme: dark;
+  background: var(--color-paper);
+  color-scheme: light;
+  -webkit-font-smoothing: antialiased;
 }
 
-html,
-body,
-#root {
-  min-height: 100%;
-  margin: 0;
-}
+html, body, #root { min-height: 100%; margin: 0; }
+body { background: var(--color-paper); color: var(--color-ink); }
 
-body {
-  min-height: 100vh;
-  background: #050607;
-  color: var(--color-ink);
-  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
-}
-
-.react-flow__attribution {
-  display: none;
-}
-
-.agent-graph-flow .react-flow__pane {
-  cursor: grab;
-}
-
+.react-flow__attribution { display: none; }
+.agent-graph-flow .react-flow__pane { cursor: grab; }
 .agent-graph-flow .react-flow__node:focus,
-.agent-graph-flow .react-flow__node:focus-visible {
-  outline: none;
-}
-
-.agent-graph-flow .react-flow__edge-path {
-  stroke-linecap: round;
-}
+.agent-graph-flow .react-flow__node:focus-visible { outline: none; }
+.agent-graph-flow .react-flow__edge-path { stroke-linecap: round; }
 
 .agent-graph-flow .react-flow__controls {
-  bottom: 24px;
-  left: 24px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
+  bottom: 20px;
+  left: 20px;
+  border: 1px solid var(--color-line);
+  border-radius: 6px;
+  background: var(--color-surface);
+  box-shadow: 0 4px 12px rgba(26, 26, 29, 0.04);
   overflow: hidden;
-  background: rgba(10, 11, 13, 0.88);
-  backdrop-filter: blur(18px);
 }
-
 .agent-graph-flow .react-flow__controls-button {
-  width: 38px;
-  height: 38px;
+  width: 28px; height: 28px;
   border: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--color-line);
   background: transparent;
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--color-ink-muted);
 }
+.agent-graph-flow .react-flow__controls-button:last-child { border-bottom: 0; }
+.agent-graph-flow .react-flow__controls-button svg { max-width: 12px; max-height: 12px; fill: currentColor; }
+.agent-graph-flow .react-flow__controls-button:hover { background: rgba(26, 26, 29, 0.04); color: var(--color-ink); }
 
-.agent-graph-flow .react-flow__controls-button:last-child {
-  border-bottom: 0;
+@keyframes accent-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.55; transform: scale(0.9); }
 }
+.accent-pulse { animation: accent-pulse 1.4s ease-in-out infinite; }
 
-.agent-graph-flow .react-flow__controls-button svg {
-  max-width: 14px;
-  max-height: 14px;
+@keyframes edge-particle {
+  0%   { offset-distance: 0%;   opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { offset-distance: 100%; opacity: 0; }
 }
-
-.agent-graph-flow .react-flow__controls-button:hover {
-  background: rgba(255, 255, 255, 0.06);
+.edge-particle {
+  fill: var(--color-accent);
+  filter: drop-shadow(0 0 4px rgba(216, 73, 46, 0.4));
+  animation: edge-particle 1.6s linear infinite;
 }

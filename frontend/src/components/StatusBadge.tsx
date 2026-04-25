@@ -1,53 +1,41 @@
 import type { NodeStatus } from "../types";
 
-const STATUS_STYLES: Record<
-  NodeStatus,
-  { tone: string; dot: string; label: string }
-> = {
-  idle: {
-    tone: "border-white/10 bg-white/[0.04] text-white/55",
-    dot: "bg-white/35",
-    label: "Idle",
-  },
-  queued: {
-    tone: "border-amber-400/15 bg-amber-400/10 text-amber-100",
-    dot: "bg-amber-300",
-    label: "Queued",
-  },
+type BadgeStyle = { tone: string; dot: string; label: string; pulse?: boolean; glyph?: string };
+
+const STATUS_STYLES: Record<NodeStatus, BadgeStyle> = {
+  idle: { tone: "border-line text-ink-soft", dot: "bg-ink/25", label: "Idle" },
+  queued: { tone: "border-line text-ink-muted", dot: "bg-ink-muted", label: "Queued", pulse: true },
   running: {
-    tone: "border-sky-400/15 bg-sky-400/10 text-sky-100",
-    dot: "bg-sky-300",
+    tone: "border-[color:var(--color-accent)]/30 bg-[color:var(--color-accent-soft)] text-[color:var(--color-accent-strong)]",
+    dot: "bg-[color:var(--color-accent)]",
     label: "Running",
+    pulse: true,
   },
   completed: {
-    tone: "border-emerald-400/15 bg-emerald-400/10 text-emerald-100",
-    dot: "bg-emerald-300",
+    tone: "border-[color:var(--color-success)]/30 bg-success-soft text-[color:var(--color-success)]",
+    dot: "bg-[color:var(--color-success)]",
     label: "Completed",
   },
   failed: {
-    tone: "border-rose-400/15 bg-rose-400/10 text-rose-100",
-    dot: "bg-rose-300",
+    tone: "border-[color:var(--color-danger)]/30 bg-danger-soft text-[color:var(--color-danger)]",
+    dot: "bg-[color:var(--color-danger)]",
     label: "Failed",
   },
   merged: {
-    tone: "border-lime-400/15 bg-lime-400/10 text-lime-100",
-    dot: "bg-lime-300",
+    tone: "border-[color:var(--color-success)] bg-[color:var(--color-success)] text-paper",
+    dot: "bg-paper",
     label: "Merged",
+    glyph: "✓",
   },
 };
 
-type StatusBadgeProps = {
-  status: NodeStatus;
-};
-
-export function StatusBadge({ status }: StatusBadgeProps) {
+export function StatusBadge({ status }: { status: NodeStatus }) {
   const badge = STATUS_STYLES[status];
-
   return (
-    <span
-      className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${badge.tone}`}
-    >
-      <span className={`h-1.5 w-1.5 rounded-full ${badge.dot}`} />
+    <span className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-eyebrow ${badge.tone}`}>
+      {badge.glyph
+        ? <span className="text-[11px] leading-none">{badge.glyph}</span>
+        : <span className={`h-1.5 w-1.5 rounded-full ${badge.dot} ${badge.pulse ? "accent-pulse" : ""}`} />}
       {badge.label}
     </span>
   );

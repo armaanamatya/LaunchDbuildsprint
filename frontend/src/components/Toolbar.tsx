@@ -1,32 +1,80 @@
 type ToolbarProps = {
   baseBranch: string;
-  onCreateBranch: () => void;
+  onOpenCreate: () => void;
+  onOpenCompare: () => void;
+  onReset: () => void;
+  canCompare: boolean;
+  completedCount: number;
+  showAdvancedActions: boolean;
 };
 
-export function Toolbar({ baseBranch, onCreateBranch }: ToolbarProps) {
+export function Toolbar({
+  baseBranch,
+  onOpenCreate,
+  onOpenCompare,
+  onReset,
+  canCompare,
+  completedCount,
+  showAdvancedActions,
+}: ToolbarProps) {
+  const compareLabel = canCompare ? `Compare ${completedCount} →` : "Compare";
+  const branchIsLong = baseBranch.length > 18;
+
   return (
-    <div className="flex flex-wrap items-center gap-4 rounded-[1.75rem] border border-white/10 bg-[#0d0f11]/82 px-4 py-3 shadow-[0_18px_60px_rgba(0,0,0,0.42)] backdrop-blur-2xl">
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_18px_rgba(74,222,128,0.65)]" />
-          <p className="font-display text-lg font-semibold tracking-[-0.03em] text-white">
-            Agent Graph
-          </p>
-          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/60">
-            {baseBranch}
-          </span>
-        </div>
-        <p className="mt-1 text-sm text-white/45">
-          Branch, compare, choose, and merge without losing the graph.
+    <div className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-full border border-line bg-surface px-3 py-2 shadow-panel">
+      {/* Identity */}
+      <div className="flex items-center gap-2 pl-1 pr-2">
+        <span className="h-1.5 w-1.5 rounded-full bg-ink" />
+        <p className="font-display text-[15px] font-semibold tracking-[-0.02em] text-ink">
+          Agent Graph
         </p>
+        <span
+          className={`rounded-full border border-line bg-paper px-2 py-0.5 text-[10px] font-semibold text-ink-muted ${
+            branchIsLong
+              ? "max-w-[14ch] truncate normal-case tracking-[0.04em]"
+              : "uppercase tracking-[0.16em]"
+          }`}
+          title={baseBranch}
+        >
+          {branchIsLong ? baseBranch : baseBranch.toUpperCase()}
+        </span>
       </div>
+
+      <div className="hidden h-5 w-px bg-line sm:block" />
+
+      {/* Primary entry-point — secondary tier (the empty-state hero owns the dominant CTA) */}
       <button
         type="button"
-        onClick={onCreateBranch}
-        className="rounded-full border border-amber-400/30 bg-[linear-gradient(180deg,rgba(251,191,36,0.18),rgba(251,191,36,0.08))] px-4 py-2.5 text-sm font-semibold text-amber-50 transition duration-200 hover:border-amber-300/50 hover:bg-[linear-gradient(180deg,rgba(251,191,36,0.24),rgba(251,191,36,0.12))]"
+        onClick={onOpenCreate}
+        className="rounded-full border border-line bg-paper px-3 py-1.5 text-sm font-semibold text-ink hover:border-line-strong"
       >
         + New branch
       </button>
+
+      {showAdvancedActions && (
+        <>
+          <div className="hidden h-5 w-px bg-line sm:block" />
+          <button
+            type="button"
+            onClick={onOpenCompare}
+            disabled={!canCompare}
+            className={
+              canCompare
+                ? "rounded-full bg-ink px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-paper hover:bg-ink/90"
+                : "rounded-full border border-line/50 bg-paper px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-soft cursor-not-allowed"
+            }
+          >
+            {compareLabel}
+          </button>
+          <button
+            type="button"
+            onClick={onReset}
+            className="rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted hover:text-[color:var(--color-danger)]"
+          >
+            Reset
+          </button>
+        </>
+      )}
     </div>
   );
 }

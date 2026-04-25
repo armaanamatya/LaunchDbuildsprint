@@ -1,42 +1,73 @@
-import { startTransition, useEffect } from "react";
+import { startTransition, useEffect, useMemo, useState } from "react";
+import { ComparePanel } from "./components/ComparePanel";
+import { ConnectionIndicator } from "./components/ConnectionIndicator";
+import { CreateBranchModal } from "./components/CreateBranchModal";
+import { DetailPanel } from "./components/DetailPanel";
+import { EmptyStateCTA } from "./components/EmptyStateCTA";
 import { GraphView } from "./components/GraphView";
-import { StatusBadge } from "./components/StatusBadge";
+import { KeyboardShortcutsOverlay } from "./components/KeyboardShortcutsOverlay";
+import { StatusPaletteSwatch } from "./components/StatusPaletteSwatch";
+import { StatusStrip } from "./components/StatusStrip";
 import { Toolbar } from "./components/Toolbar";
+import { ToastHost } from "./components/Toast";
+import { useGraphSSE } from "./hooks/useGraphSSE";
+import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useGraphStore } from "./store/graphStore";
 
-function formatTimestamp(value: string) {
-  const date = new Date(value);
+const HERO_PROMPT = `Add rate limiting to POST /api/login in the demo repo.
 
-  if (Number.isNaN(date.getTime())) {
-    return "Awaiting activity";
-  }
+Requirements:
+- Max 5 attempts per IP within a 60-second sliding window.
+- Return HTTP 429 with a Retry-After header when exceeded.
+- Successful logins must count toward the limit (prevent enumeration).
+- The limit applies per-IP regardless of email (prevent email rotation bypass).
 
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
-}
+Make the four failing tests in tests/test_rate_limit.py pass without breaking tests/test_login.py.`;
 
-function compactPath(path: string) {
-  const segments = path.split(/[/\\]+/).filter(Boolean);
+const DRAWER_WIDTH = "26rem";
 
-  if (segments.length <= 3) {
-    return path;
-  }
-
-  return `.../${segments.slice(-3).join("/")}`;
-}
+// Z-index discipline:
+//   z-10 — content (hero, graph)
+//   z-20 — chrome (toolbar, connection, drawer, status strip)
+//   z-30 — overlays (modals, ComparePanel sheet, toasts, shortcuts overlay)
 
 export function App() {
-  const { graph, selectedNodeId, isLoading, loadGraph, selectNode, addDraftBranch } =
-    useGraphStore();
-  const selectedNode =
-    graph.nodes.find((node) => node.id === selectedNodeId) ?? graph.nodes[0];
-  const activeNodeCount = graph.nodes.filter(
-    (node) => node.status === "queued" || node.status === "running",
-  ).length;
+  if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("palette") === "1") {
+    return <StatusPaletteSwatch />;
+  }
+  const graph = useGraphStore((s) => s.graph);
+  const selectedNodeId = useGraphStore((s) => s.selectedNodeId);
+  const loadGraph = useGraphStore((s) => s.loadGraph);
+  const selectNode = useGraphStore((s) => s.selectNode);
+  const createBranch = useGraphStore((s) => s.createBranch);
+  const spawnTriple = useGraphStore((s) => s.spawnTriple);
+  const runBranch = useGraphStore((s) => s.runBranch);
+  const mergeBranch = useGraphStore((s) => s.mergeBranch);
+  const openCompare = useGraphStore((s) => s.openCompare);
+  const resetDemo = useGraphStore((s) => s.resetDemo);
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+  const handleCreate = async (label: string, prompt: string) => {
+    await createBranch(label, prompt);
+  };
+
+  const handleQuickStart = async (prompt: string = HERO_PROMPT) => {
+    await spawnTriple(prompt);
+  };
+
+  useGraphSSE();
+
+  const branchCount = graph.nodes.filter((n) => n.parent_id !== null).length;
+  const isEmpty = branchCount === 0;
+  const selectedNode = useMemo(
+    () => graph.nodes.find((node) => node.id === selectedNodeId) ?? graph.nodes[0],
+    [graph.nodes, selectedNodeId],
+  );
+  const showDetailPanel = Boolean(
+    !isEmpty && selectedNode && selectedNode.parent_id !== null,
+  );
   const completedNodeCount = graph.nodes.filter(
     (node) => node.status === "completed" || node.status === "merged",
   ).length;
@@ -47,101 +78,132 @@ export function App() {
     });
   }, [loadGraph]);
 
+  useKeyboardShortcuts({
+    onNewBranch: () => setCreateOpen(true),
+    onRunSelected: () => {
+      if (selectedNode && selectedNode.parent_id !== null) {
+        void runBranch(selectedNode.id);
+      }
+    },
+    onCompare: () => {
+      if (completedNodeCount >= 2) openCompare();
+    },
+    onMergeSelected: () => {
+      if (selectedNode && selectedNode.status === "completed") {
+        void mergeBranch(selectedNode.id);
+      }
+    },
+    onShowShortcuts: () => setShortcutsOpen(true),
+  });
+
+  // Reserve space on the right for the drawer when it's open. CSS transitions
+  // smooth the layout shift; ReactFlow re-fits inside GraphView once the
+  // container width settles.
+  const reservedRight = showDetailPanel ? DRAWER_WIDTH : "0rem";
+
   return (
-    <div className="min-h-screen bg-[#050607] text-white">
+    <div className="min-h-screen bg-paper text-ink">
       <main className="relative min-h-screen overflow-hidden">
-        <GraphView
-          graph={graph}
-          selectedNodeId={selectedNodeId}
-          onSelectNode={selectNode}
+        {/* Canvas area — shrinks via paddingRight when drawer opens */}
+        <div
+          className="relative h-screen transition-[padding] duration-300 ease-out"
+          style={{ paddingRight: reservedRight }}
+        >
+          {isEmpty ? (
+            <div className="absolute inset-0 blueprint-bg">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_30%,rgba(216,73,46,0.05),transparent_55%)]" />
+              {/* Decorative ghost branches — telegraphs what spawning produces */}
+              <svg
+                aria-hidden
+                className="absolute left-1/2 top-[68%] h-[260px] w-[640px] -translate-x-1/2"
+                viewBox="0 0 640 260"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1"
+                strokeDasharray="4 6"
+                style={{ color: "rgba(26, 26, 29, 0.08)" }}
+              >
+                <path d="M320 0 C 200 80, 140 160, 120 240" />
+                <path d="M320 0 L 320 240" />
+                <path d="M320 0 C 440 80, 500 160, 520 240" />
+              </svg>
+            </div>
+          ) : (
+            <GraphView
+              graph={graph}
+              selectedNodeId={selectedNodeId}
+              onSelectNode={selectNode}
+            />
+          )}
+
+          {isEmpty && (
+            <EmptyStateCTA
+              defaultPrompt={HERO_PROMPT}
+              onSubmit={handleQuickStart}
+              onCreate={() => setCreateOpen(true)}
+            />
+          )}
+        </div>
+
+        {/* Toolbar — top-left, sits in the (shrunken) main area */}
+        <div
+          className="pointer-events-none absolute top-0 left-0 z-20 p-4 sm:p-6 transition-[padding] duration-300 ease-out"
+          style={{ right: reservedRight }}
+        >
+          <div className="flex items-start gap-3">
+            <div className="pointer-events-auto min-w-0">
+              <Toolbar
+                baseBranch={graph.base_branch}
+                onOpenCreate={() => setCreateOpen(true)}
+                onOpenCompare={openCompare}
+                onReset={() => void resetDemo()}
+                canCompare={completedNodeCount >= 2}
+                completedCount={completedNodeCount}
+                showAdvancedActions={!isEmpty}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Connection indicator — fixed top-right, slides with drawer */}
+        <div
+          className="pointer-events-none absolute top-0 z-20 hidden p-4 sm:p-6 md:block transition-[right] duration-300 ease-out"
+          style={{ right: reservedRight }}
+        >
+          <ConnectionIndicator />
+        </div>
+
+        {/* Status strip — fixed bottom-left, only when populated */}
+        {!isEmpty && (
+          <div
+            className="pointer-events-none absolute bottom-0 left-0 z-20 p-4 sm:p-6 transition-[padding] duration-300 ease-out"
+            style={{ right: reservedRight }}
+          >
+            <div className="pointer-events-auto inline-block">
+              <StatusStrip branchCount={branchCount} />
+            </div>
+          </div>
+        )}
+
+        {/* Drawer — fixed to viewport right edge */}
+        {showDetailPanel && selectedNode && (
+          <div
+            className="pointer-events-none fixed right-0 top-0 z-20 flex h-full items-stretch p-4 pt-24 sm:p-6 sm:pt-24"
+            style={{ width: DRAWER_WIDTH }}
+          >
+            <DetailPanel node={selectedNode} onClose={() => selectNode("root")} />
+          </div>
+        )}
+
+        <CreateBranchModal
+          open={createOpen}
+          defaultPrompt={HERO_PROMPT}
+          onSubmit={handleCreate}
+          onClose={() => setCreateOpen(false)}
         />
-
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 p-4 sm:p-6">
-          <div className="flex items-start justify-between gap-3">
-            <div className="pointer-events-auto max-w-xl">
-              <Toolbar baseBranch={graph.base_branch} onCreateBranch={addDraftBranch} />
-            </div>
-            <div className="pointer-events-auto hidden items-center gap-2 md:flex">
-              <div className="rounded-full border border-white/10 bg-black/35 px-3 py-2 text-[11px] font-medium text-white/70 backdrop-blur-xl">
-                {graph.nodes.length} branches in view
-              </div>
-              <div className="rounded-full border border-white/10 bg-black/35 px-3 py-2 text-[11px] font-medium text-white/70 backdrop-blur-xl">
-                {activeNodeCount} active
-              </div>
-              <div className="rounded-full border border-white/10 bg-black/35 px-3 py-2 text-[11px] font-medium text-white/70 backdrop-blur-xl">
-                {completedNodeCount} ready to compare
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 p-4 sm:p-6">
-          <div className="flex justify-end">
-            <aside className="pointer-events-auto w-full max-w-[22rem] rounded-[2rem] border border-white/10 bg-[#0d0f11]/88 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.48)] backdrop-blur-2xl">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/35">
-                Selected branch
-              </p>
-              {selectedNode ? (
-                <div className="mt-4 space-y-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <h1 className="font-display text-[1.7rem] font-semibold tracking-[-0.03em] text-white">
-                        {selectedNode.label}
-                      </h1>
-                      <p className="mt-1 truncate text-sm text-white/45">
-                        {selectedNode.branch_name}
-                      </p>
-                    </div>
-                    <StatusBadge status={selectedNode.status} />
-                  </div>
-
-                  <p className="text-sm leading-6 text-white/72">
-                    {selectedNode.prompt ??
-                      selectedNode.summary ??
-                      "Prepared for a new implementation path from the base branch."}
-                  </p>
-
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/35">
-                        Worktree
-                      </p>
-                      <p className="mt-2 break-all text-sm leading-6 text-white/72">
-                        {compactPath(selectedNode.worktree_path)}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/35">
-                        Last update
-                      </p>
-                      <p className="mt-2 text-sm leading-6 text-white/72">
-                        {formatTimestamp(selectedNode.updated_at)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] p-4">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/35">
-                      Why this view
-                    </p>
-                    <p className="mt-2 text-sm leading-6 text-white/62">
-                      The canvas stays primary while branch detail appears only when it helps
-                      decide between implementation paths.
-                    </p>
-                    <p className="mt-3 text-sm leading-6 text-white/72">
-                      {isLoading
-                        ? "Syncing the latest graph snapshot from the backend."
-                        : selectedNode.summary ??
-                          "Node contract is live and ready for worktree lifecycle, logs, diffs, and merge flow."}
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <p className="mt-4 text-sm text-white/55">No branch selected.</p>
-              )}
-            </aside>
-          </div>
-        </div>
+        <ComparePanel />
+        <KeyboardShortcutsOverlay open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+        <ToastHost />
       </main>
     </div>
   );

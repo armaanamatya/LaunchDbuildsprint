@@ -680,24 +680,27 @@ async def graph_sse() -> StreamingResponse:
 
 @router.get("/nodes/{node_id}/sse")
 async def node_sse(node_id: str) -> StreamingResponse:
-    """Per-node SSE stream: filtered to events for a specific node plus heartbeats."""
+    """Per-node SSE stream: typed predicate at the bus level (no JSON scanning)."""
     node = await graph_state.get_node(node_id)
     if node is None:
         raise HTTPException(status_code=404, detail="Node not found")
 
-    queue = await event_bus.subscribe()
+    # Real bus-level filter; the heartbeat events emitted by sse_stream itself
+    # are not subject to this predicate (they're generated downstream when the
+    # queue idles), so per-node clients still receive keep-alives.
+    queue = await event_bus.subscribe(
+        predicate=lambda evt: evt.node_id == node_id,
+    )
 
-    async def filtered() -> AsyncGenerator[str, None]:
+    async def wrapped() -> AsyncGenerator[str, None]:
         try:
             async for chunk in sse_stream(queue):
-                # Always pass heartbeats; pass node events by checking node_id in payload
-                if "heartbeat" in chunk or f'"node_id": "{node_id}"' in chunk:
-                    yield chunk
+                yield chunk
         finally:
             await event_bus.unsubscribe(queue)
 
     return StreamingResponse(
-        filtered(),
+        wrapped(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
     )

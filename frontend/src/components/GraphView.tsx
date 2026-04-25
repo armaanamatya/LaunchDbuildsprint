@@ -1,16 +1,33 @@
 import {
-  Background,
-  BackgroundVariant,
   Controls,
   MarkerType,
+  MiniMap,
   ReactFlow,
   ReactFlowProvider,
   type Edge,
+  type Node as RfNode,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import dagre from "dagre";
 import { useMemo } from "react";
-import type { GraphSnapshot } from "../types";
+import type { GraphNode, GraphSnapshot, NodeStatus } from "../types";
+import { AnimatedEdge } from "./edges/AnimatedEdge";
 import { WorktreeNode, type WorktreeFlowNode } from "./WorktreeNode";
+
+function statusColor(status: NodeStatus): string {
+  switch (status) {
+    case "running":
+    case "queued":
+      return "#d8492e"; // accent
+    case "completed":
+    case "merged":
+      return "#4f7942"; // success
+    case "failed":
+      return "#a02e2e"; // danger
+    default:
+      return "#6b6960"; // ink-muted
+  }
+}
 
 type GraphViewProps = {
   graph: GraphSnapshot;
@@ -22,75 +39,48 @@ const nodeTypes = {
   worktree: WorktreeNode,
 };
 
-const PRIMARY_CHILD_OFFSETS = [
-  { x: 0, y: 360 },
-  { x: 560, y: 210 },
-  { x: 560, y: 510 },
-  { x: 1040, y: 360 },
-];
+const edgeTypes = {
+  animated: AnimatedEdge,
+};
 
-function buildNodePositions(graph: GraphSnapshot) {
-  const childrenByParent = new Map<string | null, typeof graph.nodes>();
+const NODE_WIDTH = 300;
+const NODE_HEIGHT = 200;
+
+function layoutWithDagre(graph: GraphSnapshot) {
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({
+    rankdir: "TB",
+    nodesep: 56,
+    ranksep: 110,
+    marginx: 80,
+    marginy: 80,
+  });
+  g.setDefaultEdgeLabel(() => ({}));
 
   for (const node of graph.nodes) {
-    const siblings = childrenByParent.get(node.parent_id) ?? [];
-    siblings.push(node);
-    childrenByParent.set(node.parent_id, siblings);
+    g.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+  }
+  for (const edge of graph.edges) {
+    g.setEdge(edge.source, edge.target);
   }
 
+  dagre.layout(g);
+
   const positions = new Map<string, { x: number; y: number }>();
-
-  const placeChildren = (parentId: string, depth: number) => {
-    const parentPosition = positions.get(parentId);
-    const children = childrenByParent.get(parentId) ?? [];
-
-    if (!parentPosition) {
-      return;
+  for (const node of graph.nodes) {
+    const layout = g.node(node.id);
+    if (layout) {
+      positions.set(node.id, {
+        x: layout.x - NODE_WIDTH / 2,
+        y: layout.y - NODE_HEIGHT / 2,
+      });
     }
-
-    children.forEach((child, index) => {
-      let position = {
-        x: parentPosition.x + 460,
-        y: parentPosition.y + index * 280,
-      };
-
-      if (depth === 0) {
-        const offset = PRIMARY_CHILD_OFFSETS[index] ?? {
-          x: 1040 + index * 280,
-          y: 280 + index * 180,
-        };
-        position = {
-          x: parentPosition.x + offset.x,
-          y: parentPosition.y + offset.y,
-        };
-      } else {
-        const spread = (index - (children.length - 1) / 2) * 260;
-        position = {
-          x: parentPosition.x + 440,
-          y: parentPosition.y + 220 + spread,
-        };
-      }
-
-      positions.set(child.id, position);
-      placeChildren(child.id, depth + 1);
-    });
-  };
-
-  const roots = childrenByParent.get(null) ?? graph.nodes.filter((node) => node.parent_id === null);
-
-  roots.forEach((root, index) => {
-    positions.set(root.id, {
-      x: 180 + index * 520,
-      y: 110,
-    });
-    placeChildren(root.id, 0);
-  });
-
+  }
   return positions;
 }
 
 export function GraphView({ graph, selectedNodeId, onSelectNode }: GraphViewProps) {
-  const positions = useMemo(() => buildNodePositions(graph), [graph]);
+  const positions = useMemo(() => layoutWithDagre(graph), [graph]);
 
   const nodes = useMemo<WorktreeFlowNode[]>(
     () =>
@@ -105,69 +95,72 @@ export function GraphView({ graph, selectedNodeId, onSelectNode }: GraphViewProp
     [graph.nodes, positions, selectedNodeId],
   );
 
-  const edges = useMemo<Edge[]>(
-    () => {
-      const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const edges = useMemo<Edge[]>(() => {
+    const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
 
-      return graph.edges.map((edge) => {
-        const targetNode = nodeById.get(edge.target);
-        const isActive =
-          targetNode?.status === "running" || targetNode?.status === "queued";
-        const stroke = isActive ? "rgba(248, 208, 138, 0.86)" : "rgba(255, 255, 255, 0.32)";
+    return graph.edges.map((edge) => {
+      const targetNode = nodeById.get(edge.target);
+      const isActive =
+        targetNode?.status === "running" || targetNode?.status === "queued";
+      const stroke = isActive
+        ? "var(--color-accent)"
+        : "var(--color-line-strong)";
 
-        return {
-          id: edge.id,
-          source: edge.source,
-          target: edge.target,
-          animated: isActive,
-          type: "smoothstep",
-          markerEnd: {
-            type: MarkerType.ArrowClosed,
-            color: stroke,
-            width: 18,
-            height: 18,
-          },
-          style: {
-            stroke,
-            strokeWidth: isActive ? 2 : 1.5,
-          },
-        };
-      });
-    },
-    [graph.edges, graph.nodes],
-  );
+      return {
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        animated: isActive,
+        type: isActive ? "animated" : "smoothstep",
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          color: stroke,
+          width: 16,
+          height: 16,
+        },
+        style: {
+          stroke,
+          strokeWidth: isActive ? 1.75 : 1,
+        },
+      };
+    });
+  }, [graph.edges, graph.nodes]);
 
   return (
     <ReactFlowProvider>
-      <div className="relative h-screen w-full overflow-hidden bg-[#050607]">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(255,186,92,0.08),_transparent_18%),radial-gradient(circle_at_78%_24%,_rgba(255,255,255,0.03),_transparent_22%),linear-gradient(180deg,_rgba(3,4,5,0.72),_rgba(3,4,5,0.96))]" />
+      <div className="blueprint-bg relative h-screen w-full overflow-hidden">
         <ReactFlow
           className="agent-graph-flow"
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           fitView
-          fitViewOptions={{ padding: 0.2, duration: 500 }}
-          minZoom={0.45}
-          maxZoom={1.35}
+          fitViewOptions={{ padding: 0.25, duration: 500 }}
+          minZoom={0.4}
+          maxZoom={1.4}
           onNodeClick={(_, node) => onSelectNode(node.id)}
           proOptions={{ hideAttribution: true }}
         >
-          <Background
-            id="minor-grid"
-            color="rgba(255,255,255,0.035)"
-            gap={24}
-            size={1}
-            variant={BackgroundVariant.Lines}
-          />
-          <Background
-            id="major-grid"
-            color="rgba(255,255,255,0.045)"
-            gap={120}
-            size={1}
-            variant={BackgroundVariant.Lines}
-          />
-          <Controls />
+          <Controls showInteractive={false} />
+          {graph.nodes.length >= 4 ? (
+            <MiniMap
+              pannable
+              zoomable
+              ariaLabel="Graph minimap"
+              maskColor="rgba(245, 241, 232, 0.7)"
+              nodeColor={(n: RfNode) => statusColor((n.data as GraphNode).status)}
+              nodeStrokeColor="rgba(26,26,29,0.22)"
+              nodeStrokeWidth={2}
+              nodeBorderRadius={3}
+              style={{
+                background: "var(--color-surface)",
+                border: "1px solid var(--color-line)",
+                borderRadius: 8,
+                boxShadow: "0 1px 0 rgba(26,26,29,0.05), 0 12px 32px rgba(26,26,29,0.08)",
+              }}
+            />
+          ) : null}
         </ReactFlow>
       </div>
     </ReactFlowProvider>

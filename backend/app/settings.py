@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     worktree_dir: str = Field(default=".agent-worktrees", alias="AGENT_GRAPH_WORKTREE_DIR")
     enable_real_runs: bool = Field(default=False, alias="AGENT_GRAPH_ENABLE_REAL_RUNS")
     enable_eval: bool = Field(default=True, alias="AGENT_GRAPH_ENABLE_EVAL")
+    # Wall-clock cap on a single agent run. A stuck agent without this budget
+    # holds a node in `running` forever; with it, the task fails loudly and
+    # the node returns to `failed` so the user can retry or compare what landed.
+    max_run_seconds: int = Field(default=600, alias="AGENT_GRAPH_MAX_RUN_SECONDS")
     host: str = Field(default="127.0.0.1", alias="AGENT_GRAPH_HOST")
     port: int = Field(default=8000, alias="AGENT_GRAPH_PORT")
     cors_origins: str = Field(
