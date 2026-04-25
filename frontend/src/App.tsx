@@ -6,6 +6,7 @@ import { DetailPanel } from "./components/DetailPanel";
 import { EmptyStateCTA } from "./components/EmptyStateCTA";
 import { GraphView } from "./components/GraphView";
 import { KeyboardShortcutsOverlay } from "./components/KeyboardShortcutsOverlay";
+import { StatusStrip } from "./components/StatusStrip";
 import { Toolbar } from "./components/Toolbar";
 import { ToastHost } from "./components/Toast";
 import { useGraphSSE } from "./hooks/useGraphSSE";
@@ -22,12 +23,20 @@ Requirements:
 
 Make the four failing tests in tests/test_rate_limit.py pass without breaking tests/test_login.py.`;
 
+const DRAWER_WIDTH = "26rem";
+
+// Z-index discipline:
+//   z-10 — content (hero, graph)
+//   z-20 — chrome (toolbar, connection, drawer, status strip)
+//   z-30 — overlays (modals, ComparePanel sheet, toasts, shortcuts overlay)
+
 export function App() {
   const graph = useGraphStore((s) => s.graph);
   const selectedNodeId = useGraphStore((s) => s.selectedNodeId);
   const loadGraph = useGraphStore((s) => s.loadGraph);
   const selectNode = useGraphStore((s) => s.selectNode);
   const createBranch = useGraphStore((s) => s.createBranch);
+  const spawnTriple = useGraphStore((s) => s.spawnTriple);
   const runBranch = useGraphStore((s) => s.runBranch);
   const mergeBranch = useGraphStore((s) => s.mergeBranch);
   const openCompare = useGraphStore((s) => s.openCompare);
@@ -40,10 +49,8 @@ export function App() {
     await createBranch(label, prompt);
   };
 
-  const handleQuickStart = async () => {
-    for (let i = 1; i <= 3; i += 1) {
-      await createBranch(`Approach ${i}`, HERO_PROMPT);
-    }
+  const handleQuickStart = async (prompt: string = HERO_PROMPT) => {
+    await spawnTriple(prompt);
   };
 
   useGraphSSE();
@@ -54,14 +61,12 @@ export function App() {
     () => graph.nodes.find((node) => node.id === selectedNodeId) ?? graph.nodes[0],
     [graph.nodes, selectedNodeId],
   );
-  const showDetailPanel = !isEmpty && selectedNode && selectedNode.parent_id !== null;
-  const activeNodeCount = graph.nodes.filter(
-    (node) => node.status === "queued" || node.status === "running",
-  ).length;
+  const showDetailPanel = Boolean(
+    !isEmpty && selectedNode && selectedNode.parent_id !== null,
+  );
   const completedNodeCount = graph.nodes.filter(
     (node) => node.status === "completed" || node.status === "merged",
   ).length;
-  const branchesLabel = `${branchCount} ${branchCount === 1 ? "branch" : "branches"}`;
 
   useEffect(() => {
     startTransition(() => {
@@ -87,22 +92,62 @@ export function App() {
     onShowShortcuts: () => setShortcutsOpen(true),
   });
 
+  // Reserve space on the right for the drawer when it's open. CSS transitions
+  // smooth the layout shift; ReactFlow re-fits inside GraphView once the
+  // container width settles.
+  const reservedRight = showDetailPanel ? DRAWER_WIDTH : "0rem";
+
   return (
     <div className="min-h-screen bg-paper text-ink">
       <main className="relative min-h-screen overflow-hidden">
-        {isEmpty ? (
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_28%,rgba(216,73,46,0.06),transparent_55%)]" />
-        ) : (
-          <GraphView
-            graph={graph}
-            selectedNodeId={selectedNodeId}
-            onSelectNode={selectNode}
-          />
-        )}
+        {/* Canvas area — shrinks via paddingRight when drawer opens */}
+        <div
+          className="relative h-screen transition-[padding] duration-300 ease-out"
+          style={{ paddingRight: reservedRight }}
+        >
+          {isEmpty ? (
+            <div className="absolute inset-0 blueprint-bg">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_30%,rgba(216,73,46,0.05),transparent_55%)]" />
+              {/* Decorative ghost branches — telegraphs what spawning produces */}
+              <svg
+                aria-hidden
+                className="absolute left-1/2 top-[68%] h-[260px] w-[640px] -translate-x-1/2"
+                viewBox="0 0 640 260"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1"
+                strokeDasharray="4 6"
+                style={{ color: "rgba(26, 26, 29, 0.08)" }}
+              >
+                <path d="M320 0 C 200 80, 140 160, 120 240" />
+                <path d="M320 0 L 320 240" />
+                <path d="M320 0 C 440 80, 500 160, 520 240" />
+              </svg>
+            </div>
+          ) : (
+            <GraphView
+              graph={graph}
+              selectedNodeId={selectedNodeId}
+              onSelectNode={selectNode}
+            />
+          )}
 
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 p-4 sm:p-6">
-          <div className="flex items-start justify-between gap-3">
-            <div className="pointer-events-auto min-w-0 flex-1">
+          {isEmpty && (
+            <EmptyStateCTA
+              defaultPrompt={HERO_PROMPT}
+              onSubmit={handleQuickStart}
+              onCreate={() => setCreateOpen(true)}
+            />
+          )}
+        </div>
+
+        {/* Toolbar — top-left, sits in the (shrunken) main area */}
+        <div
+          className="pointer-events-none absolute top-0 left-0 z-20 p-4 sm:p-6 transition-[padding] duration-300 ease-out"
+          style={{ right: reservedRight }}
+        >
+          <div className="flex items-start gap-3">
+            <div className="pointer-events-auto min-w-0">
               <Toolbar
                 baseBranch={graph.base_branch}
                 onOpenCreate={() => setCreateOpen(true)}
@@ -113,31 +158,36 @@ export function App() {
                 showAdvancedActions={!isEmpty}
               />
             </div>
-            <div className="pointer-events-auto hidden shrink-0 items-center gap-2 md:flex">
-              <ConnectionIndicator />
-              {!isEmpty && (
-                <>
-                  <Stat>{branchesLabel} in view</Stat>
-                  <Stat>{activeNodeCount} active</Stat>
-                  <Stat>{completedNodeCount} ready to compare</Stat>
-                </>
-              )}
-            </div>
           </div>
         </div>
 
-        {isEmpty && (
-          <EmptyStateCTA
-            onQuickStart={handleQuickStart}
-            onCreate={() => setCreateOpen(true)}
-          />
+        {/* Connection indicator — fixed top-right, slides with drawer */}
+        <div
+          className="pointer-events-none absolute top-0 z-20 hidden p-4 sm:p-6 md:block transition-[right] duration-300 ease-out"
+          style={{ right: reservedRight }}
+        >
+          <ConnectionIndicator />
+        </div>
+
+        {/* Status strip — fixed bottom-left, only when populated */}
+        {!isEmpty && (
+          <div
+            className="pointer-events-none absolute bottom-0 left-0 z-20 p-4 sm:p-6 transition-[padding] duration-300 ease-out"
+            style={{ right: reservedRight }}
+          >
+            <div className="pointer-events-auto inline-block">
+              <StatusStrip branchCount={branchCount} />
+            </div>
+          </div>
         )}
 
+        {/* Drawer — fixed to viewport right edge */}
         {showDetailPanel && selectedNode && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 p-4 sm:p-6">
-            <div className="flex justify-end">
-              <DetailPanel node={selectedNode} />
-            </div>
+          <div
+            className="pointer-events-none fixed right-0 top-0 z-20 flex h-full items-stretch p-4 pt-24 sm:p-6 sm:pt-24"
+            style={{ width: DRAWER_WIDTH }}
+          >
+            <DetailPanel node={selectedNode} onClose={() => selectNode("root")} />
           </div>
         )}
 
@@ -151,14 +201,6 @@ export function App() {
         <KeyboardShortcutsOverlay open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
         <ToastHost />
       </main>
-    </div>
-  );
-}
-
-function Stat({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-sm border border-line bg-surface px-3 py-1.5 font-mono text-[10.5px] font-medium uppercase tracking-eyebrow text-ink-muted shadow-panel">
-      {children}
     </div>
   );
 }
