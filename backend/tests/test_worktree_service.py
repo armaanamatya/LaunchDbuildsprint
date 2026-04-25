@@ -278,3 +278,56 @@ def test_merge_branch_raises_on_conflict(
 
     with pytest.raises(MergeConflictError):
         svc.merge_branch("agent/conflict-b", "main", repo_path=git_repo)
+
+
+# ── strict-clean preflight (P2-E) ─────────────────────────────────────────────
+
+
+def test_create_worktree_blocks_on_modified_file(svc: WorktreeService, git_repo: Path) -> None:
+    """A modified-but-uncommitted file must block worktree creation."""
+    (git_repo / "README.md").write_text("# locally modified\n")
+
+    with pytest.raises(WorktreeError) as exc_info:
+        svc.create_worktree(
+            branch_name="agent/should-fail",
+            worktree_path=str(git_repo / "wt"),
+            parent_branch="main",
+            repo_path=git_repo,
+        )
+    msg = str(exc_info.value)
+    assert "uncommitted" in msg.lower()
+    assert "/api/v1/demo/reset" in msg
+
+
+def test_create_worktree_blocks_on_untracked_file(svc: WorktreeService, git_repo: Path) -> None:
+    """Strict-clean policy: even untracked files block creation (per docstring)."""
+    (git_repo / "untracked.txt").write_text("just sitting here\n")
+
+    with pytest.raises(WorktreeError) as exc_info:
+        svc.create_worktree(
+            branch_name="agent/should-also-fail",
+            worktree_path=str(git_repo / "wt2"),
+            parent_branch="main",
+            repo_path=git_repo,
+        )
+    assert "uncommitted" in str(exc_info.value).lower()
+
+
+def test_create_worktree_branch_collision_message_points_to_reset(
+    svc: WorktreeService, git_repo: Path
+) -> None:
+    """Branch-name collision should mention /api/v1/demo/reset as the cure."""
+    svc.create_worktree(
+        branch_name="agent/collision",
+        worktree_path=str(git_repo / "wt-first"),
+        parent_branch="main",
+        repo_path=git_repo,
+    )
+    with pytest.raises(WorktreeError) as exc_info:
+        svc.create_worktree(
+            branch_name="agent/collision",
+            worktree_path=str(git_repo / "wt-second"),
+            parent_branch="main",
+            repo_path=git_repo,
+        )
+    assert "/api/v1/demo/reset" in str(exc_info.value)
