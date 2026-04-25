@@ -60,13 +60,17 @@ def _headline(
     files_changed: int,
     has_changes: bool,
     tests_failed: int | None,
+    diff_unavailable: bool,
 ) -> str:
-    if node.status == "failed" and not has_changes:
-        return "Run failed before producing a mergeable change"
-    if not has_changes or files_changed == 0:
-        return "No code changes detected"
+    # Order matters — most specific signal wins.
     if tests_failed and tests_failed > 0:
         return f"{_approach_label(node.strategy)} — tests failing"
+    if node.status == "failed":
+        return "Run failed before producing a mergeable change"
+    if diff_unavailable:
+        return "Diff unavailable — review branch manually"
+    if not has_changes or files_changed == 0:
+        return "No code changes detected"
     # Keep the prompt out of the headline (it is rendered separately and may
     # be long). The approach + a noun the user can scan is enough.
     return f"Adds rate limiting with a {_approach_label(node.strategy).lower()}"
@@ -82,13 +86,20 @@ def _classify_risk(
     tests_failed: int | None,
     eval_ran: bool,
     node_status: str,
+    diff_unavailable: bool,
 ) -> tuple[SummaryRisk, str]:
+    # Ordering reflects signal strength: failing tests / failed run trump the
+    # data-gap markers (diff_unavailable, missing eval). Otherwise a node with
+    # red tests and a transient git failure could be reported as merely
+    # "medium — Diff data unavailable", hiding the real problem.
     if tests_failed is not None and tests_failed > 0:
         return "high", f"{tests_failed} test(s) failing"
-    if node_status == "completed" and not has_changes:
-        return "high", "Agent completed but produced no changes"
     if node_status == "failed":
         return "high", "Agent run failed"
+    if not diff_unavailable and node_status == "completed" and not has_changes:
+        return "high", "Agent completed but produced no changes"
+    if diff_unavailable:
+        return "medium", "Diff data unavailable"
     if not eval_ran or tests_passed is None:
         return "medium", "No eval data — tests were not run"
     # tests_passed == 0 with tests_failed == 0 means pytest collected nothing —
@@ -108,9 +119,12 @@ def _classify_recommendation(
     has_changes: bool,
     tests_passed: int | None,
     tests_failed: int | None,
+    diff_unavailable: bool,
 ) -> SummaryRecommendation:
     if tests_failed is not None and tests_failed > 0:
         return "do_not_merge"
+    if diff_unavailable:
+        return "needs_review"
     if not has_changes:
         return "do_not_merge"
     if tests_passed is not None and tests_passed > 0 and (tests_failed or 0) == 0:
@@ -182,37 +196,30 @@ def build_decision_summary(
     has_changes = bool(diff_text and diff_text.strip()) or files_changed > 0
     eval_ran = tests_passed is not None or tests_failed is not None
 
-    if diff_unavailable:
-        headline = "Diff unavailable — review branch manually"
-    else:
-        headline = _headline(
-            node=node,
-            files_changed=files_changed,
-            has_changes=has_changes,
-            tests_failed=tests_failed,
-        )
-    if diff_unavailable:
-        risk: SummaryRisk = "medium"
-        risk_reason = "Diff data unavailable"
-    else:
-        risk, risk_reason = _classify_risk(
-            has_changes=has_changes,
-            files_changed=files_changed,
-            insertions=insertions,
-            deletions=deletions,
-            tests_passed=tests_passed,
-            tests_failed=tests_failed,
-            eval_ran=eval_ran,
-            node_status=node.status,
-        )
-    if diff_unavailable:
-        recommendation: SummaryRecommendation = "needs_review"
-    else:
-        recommendation = _classify_recommendation(
-            has_changes=has_changes,
-            tests_passed=tests_passed,
-            tests_failed=tests_failed,
-        )
+    headline = _headline(
+        node=node,
+        files_changed=files_changed,
+        has_changes=has_changes,
+        tests_failed=tests_failed,
+        diff_unavailable=diff_unavailable,
+    )
+    risk, risk_reason = _classify_risk(
+        has_changes=has_changes,
+        files_changed=files_changed,
+        insertions=insertions,
+        deletions=deletions,
+        tests_passed=tests_passed,
+        tests_failed=tests_failed,
+        eval_ran=eval_ran,
+        node_status=node.status,
+        diff_unavailable=diff_unavailable,
+    )
+    recommendation = _classify_recommendation(
+        has_changes=has_changes,
+        tests_passed=tests_passed,
+        tests_failed=tests_failed,
+        diff_unavailable=diff_unavailable,
+    )
     focus = _review_focus(
         changed_files=changed_files,
         files_changed=files_changed,
