@@ -2,78 +2,69 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --color-paper: #f5f1e8;
-  --color-paper-deep: #ede8db;
-  --color-surface: #fefdfa;
-  --color-surface-raised: #ffffff;
-  --color-ink: #1a1a1d;
-  --color-ink-muted: #6b6960;
-  --color-ink-soft: #9a9890;
-  --color-line: rgba(26, 26, 29, 0.10);
-  --color-line-strong: rgba(26, 26, 29, 0.22);
-  --color-accent: #d8492e;
-  --color-accent-strong: #b8391f;
-  --color-accent-soft: rgba(216, 73, 46, 0.10);
-  --color-success: #4f7942;
-  --color-success-soft: rgba(79, 121, 66, 0.10);
-  --color-danger: #a02e2e;
-  --color-danger-soft: rgba(160, 46, 46, 0.10);
+@import "./styles/tokens.css";
 
-  --strategy-route-local: #2f5e80;
-  --strategy-dependency: #6b6960;
-  --strategy-middleware: #8b6f47;
+/* ---------- React Flow chrome (kept; restyled for dark) ---------- */
+.react-flow__attribution { display: none; }
 
-  font-family: "Inter", system-ui, sans-serif;
-  color: var(--color-ink);
-  background: var(--color-paper);
-  color-scheme: light;
-  -webkit-font-smoothing: antialiased;
+.agent-graph-flow .react-flow__pane { cursor: grab; }
+
+.agent-graph-flow .react-flow__node:focus,
+.agent-graph-flow .react-flow__node:focus-visible {
+  outline: none;
 }
 
-html, body, #root { min-height: 100%; margin: 0; }
-body { background: var(--color-paper); color: var(--color-ink); }
-
-.react-flow__attribution { display: none; }
-.agent-graph-flow .react-flow__pane { cursor: grab; }
-.agent-graph-flow .react-flow__node:focus,
-.agent-graph-flow .react-flow__node:focus-visible { outline: none; }
-.agent-graph-flow .react-flow__edge-path { stroke-linecap: round; }
+.agent-graph-flow .react-flow__edge-path {
+  stroke-linecap: round;
+}
 
 .agent-graph-flow .react-flow__controls {
-  bottom: 20px;
-  left: 20px;
-  border: 1px solid var(--color-line);
-  border-radius: 6px;
-  background: var(--color-surface);
-  box-shadow: 0 4px 12px rgba(26, 26, 29, 0.04);
+  bottom: 16px;
+  right: 16px;
+  left: auto;
+  background: var(--color-bg-surface-raised);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--elev-1);
   overflow: hidden;
 }
+
 .agent-graph-flow .react-flow__controls-button {
-  width: 28px; height: 28px;
+  width: 28px;
+  height: 28px;
   border: 0;
-  border-bottom: 1px solid var(--color-line);
+  border-bottom: 1px solid var(--color-border-default);
   background: transparent;
-  color: var(--color-ink-muted);
+  color: var(--color-text-secondary);
 }
+
 .agent-graph-flow .react-flow__controls-button:last-child { border-bottom: 0; }
-.agent-graph-flow .react-flow__controls-button svg { max-width: 12px; max-height: 12px; fill: currentColor; }
-.agent-graph-flow .react-flow__controls-button:hover { background: rgba(26, 26, 29, 0.04); color: var(--color-ink); }
 
-@keyframes accent-pulse {
+.agent-graph-flow .react-flow__controls-button svg {
+  max-width: 12px;
+  max-height: 12px;
+  fill: currentColor;
+}
+
+.agent-graph-flow .react-flow__controls-button:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-primary);
+}
+
+/* ---------- Edge running pulse (Phase 2 detail) ---------- */
+@keyframes edge-running-pulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+
+.edge-running {
+  animation: edge-running-pulse 2s var(--ease-in-out) infinite;
+}
+
+/* ---------- Status dot pulses ---------- */
+@keyframes status-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
-  50%      { opacity: 0.55; transform: scale(0.9); }
+  50%      { opacity: 0.55; transform: scale(0.92); }
 }
-.accent-pulse { animation: accent-pulse 1.4s ease-in-out infinite; }
-
-@keyframes edge-particle {
-  0%   { offset-distance: 0%;   opacity: 0; }
-  10%  { opacity: 1; }
-  90%  { opacity: 1; }
-  100% { offset-distance: 100%; opacity: 0; }
-}
-.edge-particle {
-  fill: var(--color-accent);
-  filter: drop-shadow(0 0 4px rgba(216, 73, 46, 0.4));
-  animation: edge-particle 1.6s linear infinite;
-}
+.status-pulse-running { animation: status-pulse 1.4s var(--ease-in-out) infinite; }
+.status-pulse-failed  { animation: status-pulse 1.5s var(--ease-in-out) infinite; }
