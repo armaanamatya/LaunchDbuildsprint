@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="panel ticket-detail">
+    <div class="panel-header">
+      <div>
+        <p class="eyebrow">{{ ticket.external_id }}</p>
+        <h2>{{ ticket.subject }}</h2>
+        <p class="lead">{{ ticket.summary }}</p>
+      </div>
+      <div class="status-stack">
+        <span class="status-pill status-{{ ticket.status }}">{{ ticket.status.replace("_", " ") }}</span>
+        <span class="priority-pill priority-{{ ticket.priority }}">{{ ticket.priority }}</span>
+      </div>
+    </div>
+
+    <div class="detail-grid">
+      <article class="detail-card">
+        <h3>Customer</h3>
+        <p>{{ ticket.customer_name }}</p>
+        <p class="muted">{{ ticket.customer_email }}</p>
+      </article>
+      <article class="detail-card">
+        <h3>Owner</h3>
+        <p>{{ ticket.assigned_agent or "Unassigned" }}</p>
+        <p class="muted">{{ ticket.queue }}</p>
+      </article>
+      <article class="detail-card">
+        <h3>Updated</h3>
+        <p>{{ ticket.updated_at }}</p>
+        <p class="muted">{{ ticket.message_count }} messages</p>
+      </article>
+    </div>
+
+    <div class="thread">
+      {% for message in ticket.messages %}
+        <article class="message-card">
+          <div class="message-header">
+            <strong>{{ message.author_name }}</strong>
+            <span class="muted">{{ message.author_role }} • {{ message.created_at }}</span>
+          </div>
+          <p>{{ message.body }}</p>
+        </article>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}

@@ -1,0 +1,2 @@
+"""PulseDesk demo app package."""
+

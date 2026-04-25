@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="panel">
+    <div class="panel-header">
+      <div>
+        <p class="eyebrow">Inbox</p>
+        <h2>Ticket search</h2>
+      </div>
+      <span class="muted">{{ tickets|length }} tickets shown</span>
+    </div>
+    <form class="search-form" method="get" action="/inbox">
+      <input type="text" name="q" value="{{ query }}" placeholder="Search subject, customer, or issue id" />
+      <select name="status">
+        <option value="">All statuses</option>
+        <option value="open" {% if status == "open" %}selected{% endif %}>Open</option>
+        <option value="pending_customer" {% if status == "pending_customer" %}selected{% endif %}>Pending customer</option>
+        <option value="pending_internal" {% if status == "pending_internal" %}selected{% endif %}>Pending internal</option>
+        <option value="resolved" {% if status == "resolved" %}selected{% endif %}>Resolved</option>
+      </select>
+      <button class="button button-primary" type="submit">Filter</button>
+    </form>
+
+    <div class="ticket-list">
+      {% for ticket in tickets %}
+        <a class="ticket-row" href="/tickets/{{ ticket.id }}">
+          <div>
+            <p class="ticket-id">{{ ticket.external_id }}</p>
+            <h3>{{ ticket.subject }}</h3>
+            <p class="ticket-meta">{{ ticket.customer_name }} • {{ ticket.customer_email }}</p>
+            <p class="ticket-summary">{{ ticket.summary }}</p>
+          </div>
+          <div class="status-stack">
+            <span class="status-pill status-{{ ticket.status }}">{{ ticket.status.replace("_", " ") }}</span>
+            <span class="priority-pill priority-{{ ticket.priority }}">{{ ticket.priority }}</span>
+            <span class="muted">{{ ticket.message_count }} messages</span>
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}
+
