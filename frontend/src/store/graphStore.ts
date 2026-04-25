@@ -67,6 +67,7 @@ const initialGraph: GraphSnapshot = {
       eval_passed: null,
       eval_failed: null,
       eval_summary: null,
+      decision_summary: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     },
@@ -147,6 +148,7 @@ export const useGraphStore = create<Store>((set, get) => ({
       eval_passed: null,
       eval_failed: null,
       eval_summary: null,
+      decision_summary: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };

@@ -94,3 +94,22 @@ def test_summary_empty_when_no_diff(repo_with_branch: tuple[Path, str, str]) -> 
     repo, base, branch = repo_with_branch
     summary = WorktreeService().get_diff_summary(base, branch, repo_path=repo)
     assert summary == DiffSummary(files_changed=0, insertions=0, deletions=0)
+
+
+def test_changed_files_lists_paths(repo_with_branch: tuple[Path, str, str]) -> None:
+    repo, base, branch = repo_with_branch
+    (repo / "a.txt").write_text("aaa\n")
+    (repo / "b.txt").write_text("bbb\n")
+    _git(["add", "."], repo)
+    _git(["commit", "-m", "two files"], repo)
+
+    files = WorktreeService().get_changed_files(base, branch, repo_path=repo)
+    assert sorted(files) == ["a.txt", "b.txt"]
+
+
+def test_changed_files_returns_empty_on_no_diff(
+    repo_with_branch: tuple[Path, str, str],
+) -> None:
+    repo, base, branch = repo_with_branch
+    files = WorktreeService().get_changed_files(base, branch, repo_path=repo)
+    assert files == []

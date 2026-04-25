@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { AgentLogPanel } from "./AgentLogPanel";
 import { DiffPanel } from "./DiffPanel";
+import { NodeSummaryCard } from "./NodeSummaryCard";
 import { StatusBadge } from "./StatusBadge";
 import { StrategyChip } from "./StrategyBadge";
 import { useGraphStore } from "../store/graphStore";
@@ -99,6 +100,7 @@ export function DetailPanel({ node }: { node: GraphNode }) {
             <p className="text-[13px] leading-6 text-ink">
               {node.prompt ?? node.summary ?? "Prepared for a new implementation path."}
             </p>
+            {!isRoot ? <NodeSummaryCard node={node} /> : null}
             <div className="grid gap-2 sm:grid-cols-2">
               <Tile label="Worktree" value={compactPath(node.worktree_path)} />
               <Tile label="Last update" value={formatTimestamp(node.updated_at)} />

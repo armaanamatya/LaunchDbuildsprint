@@ -13,6 +13,7 @@ from .events import event_bus
 from .models import GraphEvent, GraphEventType, NodeStrategy
 from .state import graph_state
 from .services import audit_log
+from .services.node_summary import build_decision_summary, write_summary
 from .services.worktree_service import worktree_service
 from .settings import get_settings
 
@@ -107,8 +108,14 @@ async def _emit_eval(node_id: str, worktree_path: str, event: GraphEvent) -> Non
     audit_log.write(worktree_path, event)
 
 
-async def _run_eval(node_id: str, worktree_path: str) -> None:
-    """Run the rate-limit acceptance tests inside the worktree and publish a result event."""
+async def _run_eval(node_id: str, worktree_path: str) -> tuple[int | None, int | None, str | None]:
+    """Run the rate-limit acceptance tests inside the worktree and publish a result event.
+
+    Returns ``(passed, failed, summary)``. Any element is ``None`` when eval
+    could not produce that datum — for example, ``uv`` missing or the tests
+    raising before reporting counts. The downstream summary builder treats
+    ``None`` as "no eval data" rather than "zero".
+    """
     try:
         proc = await asyncio.create_subprocess_exec(
             "uv",
@@ -135,7 +142,7 @@ async def _run_eval(node_id: str, worktree_path: str) -> None:
                     data={"passed": 0, "failed": 0, "summary": "Eval timed out after 120s"},
                 ),
             )
-            return
+            return None, None, "Eval timed out after 120s"
 
         output = stdout.decode("utf-8", errors="replace") if stdout else ""
         passed, failed = _parse_pytest_summary(output)
@@ -156,12 +163,15 @@ async def _run_eval(node_id: str, worktree_path: str) -> None:
                 data={"passed": passed, "failed": failed, "summary": summary},
             ),
         )
+        return passed, failed, summary
 
     except FileNotFoundError:
         # `uv` not on PATH — eval is best-effort, not critical for the demo loop.
         logger.warning("uv not on PATH; skipping eval for node %s", node_id)
+        return None, None, None
     except Exception as exc:
         logger.warning("Eval failed for node %s: %s", node_id, exc)
+        return None, None, None
 
 
 async def run_node_task(
@@ -224,35 +234,90 @@ async def run_node_task(
                 # Publish diff_ready so the frontend knows to fetch the diff,
                 # plus a fingerprint so the UI can render a "X files / +Y -Z"
                 # tag without re-fetching the full patch text.
+                diff_text = ""
+                changed_files: list[str] = []
+                files_changed = 0
+                insertions = 0
+                deletions = 0
+                diff_unavailable = False
                 try:
                     node = await graph_state.get_node(node_id)
                     if node:
-                        diff = worktree_service.get_diff(settings.base_branch, node.branch_name)
-                        summary = worktree_service.get_diff_summary(
+                        diff_text = worktree_service.get_diff(
                             settings.base_branch, node.branch_name
                         )
+                        diff_summary = worktree_service.get_diff_summary(
+                            settings.base_branch, node.branch_name
+                        )
+                        changed_files = worktree_service.get_changed_files(
+                            settings.base_branch, node.branch_name
+                        )
+                        files_changed = diff_summary.files_changed
+                        insertions = diff_summary.insertions
+                        deletions = diff_summary.deletions
                         await _emit(
                             GraphEvent(
                                 type="node.diff_ready",
                                 node_id=node_id,
                                 data={
-                                    "has_changes": bool(diff.strip()),
-                                    "diff_preview": diff[:400] if diff.strip() else "",
-                                    "files_changed": summary.files_changed,
-                                    "insertions": summary.insertions,
-                                    "deletions": summary.deletions,
+                                    "has_changes": bool(diff_text.strip()),
+                                    "diff_preview": diff_text[:400] if diff_text.strip() else "",
+                                    "files_changed": files_changed,
+                                    "insertions": insertions,
+                                    "deletions": deletions,
                                 },
                             )
                         )
                 except Exception as diff_exc:
                     logger.warning("diff_unavailable node=%s reason=%s", node_id, diff_exc)
+                    diff_unavailable = True
 
                 # Best-effort eval — runs in the same task so completion is observable.
+                tests_passed: int | None = None
+                tests_failed: int | None = None
+                test_summary: str | None = None
                 if settings.enable_eval:
                     try:
-                        await _run_eval(node_id, worktree_path)
+                        tests_passed, tests_failed, test_summary = await _run_eval(
+                            node_id, worktree_path
+                        )
                     except Exception as eval_exc:
                         logger.warning("eval_skipped node=%s reason=%s", node_id, eval_exc)
+
+                # Build & publish decision summary. Best-effort: a failure here
+                # must never break a successful run, so swallow exceptions.
+                try:
+                    summary_node = await graph_state.get_node(node_id)
+                    if summary_node is not None:
+                        decision = build_decision_summary(
+                            node=summary_node,
+                            diff_text=diff_text,
+                            changed_files=changed_files,
+                            files_changed=files_changed,
+                            insertions=insertions,
+                            deletions=deletions,
+                            tests_passed=tests_passed,
+                            tests_failed=tests_failed,
+                            test_summary=test_summary,
+                            diff_unavailable=diff_unavailable,
+                        )
+                        await graph_state.update_node_fields(
+                            node_id,
+                            decision_summary=decision,
+                            summary=decision.headline,
+                        )
+                        await _emit(
+                            GraphEvent(
+                                type="node.summary_ready",
+                                node_id=node_id,
+                                data={"summary": decision.model_dump(mode="json")},
+                            )
+                        )
+                        write_summary(worktree_path, decision)
+                except Exception as summary_exc:  # noqa: BLE001
+                    logger.warning(
+                        "summary_skipped node=%s reason=%s", node_id, summary_exc
+                    )
 
             elif event.type == "agent_failed":
                 await graph_state.update_node_status(node_id, "failed")

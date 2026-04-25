@@ -3,6 +3,7 @@ import type {
   GraphEvent,
   GraphNode,
   GraphSnapshot,
+  NodeDecisionSummary,
   NodeStatus,
 } from "../types";
 
@@ -182,6 +183,24 @@ export function applyEvent(state: GraphState, event: GraphEvent): GraphState {
             n.id === id
               ? { ...n, eval_passed: passed, eval_failed: failed, eval_summary: summary }
               : n,
+          ),
+        },
+      };
+    }
+
+    // Persist the decision summary on the node so the detail panel can render
+    // it from any later snapshot (e.g. after a backend restart + /graph fetch).
+    case "node.summary_ready": {
+      const id = event.node_id;
+      if (!id) return state;
+      const summary = event.data?.summary as NodeDecisionSummary | undefined;
+      if (!summary) return state;
+      return {
+        ...state,
+        graph: {
+          ...state.graph,
+          nodes: state.graph.nodes.map((n) =>
+            n.id === id ? { ...n, decision_summary: summary } : n,
           ),
         },
       };

@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field
 
 NodeStatus = Literal["idle", "queued", "running", "completed", "failed", "merged"]
 NodeStrategy = Literal["route_local", "dependency", "middleware"]
+SummaryRisk = Literal["low", "medium", "high", "unknown"]
+SummaryRecommendation = Literal["merge_candidate", "needs_review", "do_not_merge"]
 GraphEventType = Literal[
     # Graph lifecycle
     "graph.connected",
@@ -18,6 +20,7 @@ GraphEventType = Literal[
     "node.merged",
     "node.diff_ready",
     "node.eval_ready",
+    "node.summary_ready",
     "demo.reset",
     # Agent lifecycle
     "agent.started",
@@ -35,6 +38,24 @@ def utc_now() -> datetime:
     return datetime.now(tz=timezone.utc)
 
 
+class NodeDecisionSummary(BaseModel):
+    version: int = 1
+    headline: str
+    approach: str
+    changed_files: list[str] = Field(default_factory=list)
+    files_changed: int = 0
+    insertions: int = 0
+    deletions: int = 0
+    tests_passed: int | None = None
+    tests_failed: int | None = None
+    test_summary: str | None = None
+    risk: SummaryRisk = "unknown"
+    risk_reason: str
+    recommendation: SummaryRecommendation = "needs_review"
+    review_focus: list[str] = Field(default_factory=list)
+    generated_at: datetime = Field(default_factory=utc_now)
+
+
 class GraphNode(BaseModel):
     id: str = Field(default_factory=lambda: f"node-{uuid4().hex[:8]}")
     label: str
@@ -48,6 +69,7 @@ class GraphNode(BaseModel):
     eval_passed: int | None = None
     eval_failed: int | None = None
     eval_summary: str | None = None
+    decision_summary: NodeDecisionSummary | None = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 
