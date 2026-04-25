@@ -6,6 +6,7 @@ import { DetailPanel } from "./components/DetailPanel";
 import { EmptyStateCTA } from "./components/EmptyStateCTA";
 import { GraphView } from "./components/GraphView";
 import { KeyboardShortcutsOverlay } from "./components/KeyboardShortcutsOverlay";
+import { StatusPaletteSwatch } from "./components/StatusPaletteSwatch";
 import { StatusStrip } from "./components/StatusStrip";
 import { Toolbar } from "./components/Toolbar";
 import { ToastHost } from "./components/Toast";
@@ -31,6 +32,9 @@ const DRAWER_WIDTH = "26rem";
 //   z-30 — overlays (modals, ComparePanel sheet, toasts, shortcuts overlay)
 
 export function App() {
+  if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("palette") === "1") {
+    return <StatusPaletteSwatch />;
+  }
   const graph = useGraphStore((s) => s.graph);
   const selectedNodeId = useGraphStore((s) => s.selectedNodeId);
   const loadGraph = useGraphStore((s) => s.loadGraph);
