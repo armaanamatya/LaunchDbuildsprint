@@ -106,10 +106,10 @@ export function App() {
               <Toolbar
                 baseBranch={graph.base_branch}
                 onOpenCreate={() => setCreateOpen(true)}
-                onQuickStart={handleQuickStart}
                 onOpenCompare={openCompare}
                 onReset={() => void resetDemo()}
                 canCompare={completedNodeCount >= 2}
+                completedCount={completedNodeCount}
                 showAdvancedActions={!isEmpty}
               />
             </div>
