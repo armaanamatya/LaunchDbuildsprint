@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="hero-card">
+    <div>
+      <p class="eyebrow">Hackathon-friendly surface</p>
+      <h2>Support inbox with believable seeded data</h2>
+      <p class="lead">
+        This prepared repo is intentionally small, but it behaves like a real internal tool with auth, search, and state-changing ticket actions.
+      </p>
+    </div>
+    <div class="hero-actions">
+      <a class="button button-primary" href="/inbox">Open inbox</a>
+      <a class="button" href="/docs">Inspect API</a>
+    </div>
+  </section>
+
+  <section class="stats-grid">
+    <article class="stat-card">
+      <span>Open tickets</span>
+      <strong>{{ dashboard.stats.open_tickets }}</strong>
+    </article>
+    <article class="stat-card">
+      <span>Waiting on customer</span>
+      <strong>{{ dashboard.stats.waiting_on_customer }}</strong>
+    </article>
+    <article class="stat-card">
+      <span>High priority</span>
+      <strong>{{ dashboard.stats.high_priority }}</strong>
+    </article>
+    <article class="stat-card">
+      <span>Resolved</span>
+      <strong>{{ dashboard.stats.resolved_tickets }}</strong>
+    </article>
+  </section>
+
+  <section class="panel">
+    <div class="panel-header">
+      <div>
+        <p class="eyebrow">Recent activity</p>
+        <h3>Latest seeded tickets</h3>
+      </div>
+      <a class="text-link" href="/inbox">View full inbox</a>
+    </div>
+    <div class="ticket-list">
+      {% for ticket in dashboard.recent_tickets %}
+        <a class="ticket-row" href="/tickets/{{ ticket.id }}">
+          <div>
+            <p class="ticket-id">{{ ticket.external_id }}</p>
+            <h4>{{ ticket.subject }}</h4>
+            <p class="ticket-meta">{{ ticket.customer_name }} • {{ ticket.queue }} • {{ ticket.assigned_agent or "Unassigned" }}</p>
+          </div>
+          <div class="status-stack">
+            <span class="status-pill status-{{ ticket.status }}">{{ ticket.status.replace("_", " ") }}</span>
+            <span class="priority-pill priority-{{ ticket.priority }}">{{ ticket.priority }}</span>
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}
+

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ page_title }} | PulseDesk</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div>
+          <p class="eyebrow">Prepared Demo Repo</p>
+          <h1>PulseDesk</h1>
+          <p class="sidebar-copy">
+            A tiny support inbox app with seeded tickets, realistic agent accounts, and a resettable SQLite backend.
+          </p>
+        </div>
+        <nav class="nav-links">
+          <a href="/">Overview</a>
+          <a href="/inbox">Inbox</a>
+          <a href="/docs">API Docs</a>
+        </nav>
+      </aside>
+      <main class="content">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </body>
+</html>
+
