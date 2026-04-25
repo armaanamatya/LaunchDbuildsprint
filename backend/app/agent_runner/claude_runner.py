@@ -4,8 +4,8 @@ import logging
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
-from .base import AgentRunner, NormalizedEvent
-from .prompts import CODING_SYSTEM_PROMPT
+from .base import AgentRunner, NormalizedEvent, StrategyHint
+from .prompts import build_system_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +18,7 @@ class ClaudeAgentRunner(AgentRunner):
         node_id: str,
         prompt: str,
         worktree_path: str,
+        strategy: StrategyHint | None = None,
     ) -> AsyncGenerator[NormalizedEvent, None]:
         try:
             from claude_agent_sdk import (
@@ -43,7 +44,7 @@ class ClaudeAgentRunner(AgentRunner):
 
         options = ClaudeAgentOptions(
             cwd=Path(worktree_path),
-            system_prompt=CODING_SYSTEM_PROMPT,
+            system_prompt=build_system_prompt(strategy),
             allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep", "LS"],
             permission_mode="acceptEdits",
         )

@@ -4,7 +4,9 @@ import asyncio
 from copy import deepcopy
 from datetime import datetime, timezone
 
-from .models import GraphEdge, GraphNode, GraphSnapshot, NodeStatus
+from typing import Any
+
+from .models import GraphEdge, GraphNode, GraphSnapshot, NodeStatus, NodeStrategy
 from .settings import get_settings
 from .services.worktree_service import worktree_service
 
@@ -48,7 +50,14 @@ class GraphState:
             node = self._nodes.get(node_id)
             return deepcopy(node) if node else None
 
-    async def create_node(self, *, label: str, parent_id: str, prompt: str | None) -> GraphNode:
+    async def create_node(
+        self,
+        *,
+        label: str,
+        parent_id: str,
+        prompt: str | None,
+        strategy: NodeStrategy | None = None,
+    ) -> GraphNode:
         async with self._lock:
             parent = self._nodes[parent_id]
             # Create the node first so we get a stable UUID-based ID
@@ -56,6 +65,7 @@ class GraphState:
                 label=label,
                 parent_id=parent_id,
                 prompt=prompt,
+                strategy=strategy,
                 branch_name="",  # filled in below
                 worktree_path="",
                 summary=f"Agent branch for: {prompt or label}",
@@ -71,6 +81,39 @@ class GraphState:
             })
             self._nodes[node.id] = node
             return deepcopy(node)
+
+    async def update_node_fields(self, node_id: str, **fields: Any) -> GraphNode | None:
+        async with self._lock:
+            node = self._nodes.get(node_id)
+            if node is None:
+                return None
+            updated = node.model_copy(update={**fields, "updated_at": _utc_now()})
+            self._nodes[node_id] = updated
+            return deepcopy(updated)
+
+    async def reset_to_root(self) -> None:
+        async with self._lock:
+            root = self._nodes.get("root")
+            self._nodes.clear()
+            if root is not None:
+                self._nodes["root"] = root
+
+    def reset_for_tests(self) -> None:
+        """Rebuild from current (possibly monkey-patched) settings.
+
+        Test-only. Production code uses ``POST /api/v1/demo/reset`` instead,
+        which preserves the root and additionally cleans on-disk worktrees.
+        """
+        settings = get_settings()
+        root = GraphNode(
+            id="root",
+            label="Base branch",
+            status="idle",
+            branch_name=settings.base_branch,
+            worktree_path=settings.resolved_demo_repo_path or "Set AGENT_GRAPH_DEMO_REPO_PATH",
+            summary="Root node for the prepared demo repository.",
+        )
+        self._nodes = {root.id: root}
 
     async def update_node_status(self, node_id: str, status: NodeStatus) -> GraphNode | None:
         async with self._lock:

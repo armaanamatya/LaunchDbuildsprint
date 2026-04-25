@@ -35,6 +35,13 @@ class WorktreePlan:
     implemented: bool = False
 
 
+@dataclass(frozen=True)
+class DiffSummary:
+    files_changed: int
+    insertions: int
+    deletions: int
+
+
 def _run_git(args: list[str], repo_path: Path) -> subprocess.CompletedProcess[str]:
     """Run a git command inside repo_path. Raises WorktreeError on failure."""
     try:
@@ -51,6 +58,55 @@ def _run_git(args: list[str], repo_path: Path) -> subprocess.CompletedProcess[st
         ) from exc
     except FileNotFoundError as exc:
         raise WorktreeError("git executable not found on PATH") from exc
+
+
+def _linked_worktree_paths(repo: Path) -> list[Path]:
+    """Return absolute paths of every git-registered linked worktree (i.e.
+    every worktree except the main one rooted at ``repo``)."""
+    main = repo.resolve()
+    result = _run_git(["worktree", "list", "--porcelain"], repo)
+    paths: list[Path] = []
+    for line in result.stdout.splitlines():
+        if line.startswith("worktree "):
+            wt = Path(line[len("worktree ") :].strip()).resolve()
+            if wt != main:
+                paths.append(wt)
+    return paths
+
+
+def _dirty_paths_excluding_linked_worktrees(repo: Path) -> list[str]:
+    """``git status --porcelain`` lines whose path lies *outside* any linked
+    worktree.
+
+    Linked worktrees naturally appear as untracked directories from the main
+    worktree's perspective, but they are managed state — not stray dirtiness
+    — so the strict-clean preflight should not block on them. Anything else
+    (modified, staged, deleted, untracked outside worktrees) still blocks.
+    """
+    linked = _linked_worktree_paths(repo)
+    status = _run_git(["status", "--porcelain"], repo)
+    dirty: list[str] = []
+    for line in status.stdout.splitlines():
+        if len(line) < 4:
+            continue
+        path_str = line[3:].strip()
+        # Strip trailing slash that git emits for fully-untracked directories.
+        path_str = path_str.rstrip("/")
+        if path_str.startswith('"') and path_str.endswith('"'):
+            path_str = path_str[1:-1]
+        full = (repo / path_str).resolve()
+        # Three exclusion shapes for linked worktrees:
+        #   1. full == wt: the entry IS a linked worktree directory itself
+        #   2. wt in full.parents: entry is *inside* a linked worktree
+        #   3. full in wt.parents: entry is an *ancestor* of a linked worktree
+        #      (git reports just the bare intermediate dir when everything
+        #       inside is itself a linked worktree)
+        if any(
+            full == wt or wt in full.parents or full in wt.parents for wt in linked
+        ):
+            continue
+        dirty.append(line)
+    return dirty
 
 
 class WorktreeService:
@@ -96,13 +152,40 @@ class WorktreeService:
         parent_branch: str,
         repo_path: Path | str | None = None,
     ) -> None:
-        """Create a new git branch and worktree at worktree_path."""
+        """Create a new git branch and worktree at worktree_path.
+
+        Refuses (raises ``WorktreeError``) when the demo repo has any
+        uncommitted changes — modified files, staged changes, or untracked
+        files. This is a deliberate strict-clean policy: agent worktrees
+        must inherit a known-good state, and stray untracked files in the
+        parent are the most common silent contaminant during rehearsals.
+        Recover by committing, stashing, or ``POST /api/v1/demo/reset``.
+
+        Raises a clearer message on branch-name collisions so demos surface
+        ``run /api/v1/demo/reset`` as the action instead of raw git output.
+        """
         repo = self._get_repo_path(repo_path)
+
+        dirty = _dirty_paths_excluding_linked_worktrees(repo)
+        if dirty:
+            preview = ", ".join(line[3:].strip() for line in dirty[:5])
+            raise WorktreeError(
+                f"Demo repo has uncommitted changes (modified, staged, or untracked): {preview}. "
+                "Commit, stash, or POST /api/v1/demo/reset first."
+            )
+
         Path(worktree_path).parent.mkdir(parents=True, exist_ok=True)
-        _run_git(
-            ["worktree", "add", "-b", branch_name, worktree_path, parent_branch],
-            repo,
-        )
+        try:
+            _run_git(
+                ["worktree", "add", "-b", branch_name, worktree_path, parent_branch],
+                repo,
+            )
+        except WorktreeError as exc:
+            if "already exists" in str(exc):
+                raise WorktreeError(
+                    f"{exc} (branch name collision; POST /api/v1/demo/reset to clear)"
+                ) from exc
+            raise
 
     def delete_worktree(
         self,
@@ -139,6 +222,44 @@ class WorktreeService:
         repo = self._get_repo_path(repo_path)
         result = _run_git(["diff", f"{base_branch}...{branch_name}"], repo)
         return result.stdout
+
+    def get_diff_summary(
+        self,
+        base_branch: str,
+        branch_name: str,
+        repo_path: Path | str | None = None,
+    ) -> DiffSummary:
+        """Return file/insertion/deletion counts via ``git diff --numstat``.
+
+        Uses git's own counts (not patch-text parsing) so renames, mode-only
+        changes, and binary diffs are handled correctly. Binary files
+        contribute to ``files_changed`` but not to insertion/deletion counts
+        (git emits ``-`` instead of a number for binaries).
+        """
+        repo = self._get_repo_path(repo_path)
+        result = _run_git(
+            ["diff", "--numstat", f"{base_branch}...{branch_name}"], repo
+        )
+        files_changed = 0
+        insertions = 0
+        deletions = 0
+        for line in result.stdout.splitlines():
+            if not line.strip():
+                continue
+            parts = line.split("\t", 2)
+            if len(parts) < 3:
+                continue
+            ins_str, del_str, _path = parts
+            files_changed += 1
+            if ins_str.isdigit():
+                insertions += int(ins_str)
+            if del_str.isdigit():
+                deletions += int(del_str)
+        return DiffSummary(
+            files_changed=files_changed,
+            insertions=insertions,
+            deletions=deletions,
+        )
 
     def merge_branch(
         self,

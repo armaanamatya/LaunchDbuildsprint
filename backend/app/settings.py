@@ -17,8 +17,13 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
     demo_repo_path: str | None = Field(default=None, alias="AGENT_GRAPH_DEMO_REPO_PATH")
     base_branch: str = Field(default="main", alias="AGENT_GRAPH_BASE_BRANCH")
+    demo_baseline_ref: str = Field(
+        default="refs/agent-graph/demo-baseline",
+        alias="AGENT_GRAPH_DEMO_BASELINE_REF",
+    )
     worktree_dir: str = Field(default=".agent-worktrees", alias="AGENT_GRAPH_WORKTREE_DIR")
     enable_real_runs: bool = Field(default=False, alias="AGENT_GRAPH_ENABLE_REAL_RUNS")
+    enable_eval: bool = Field(default=True, alias="AGENT_GRAPH_ENABLE_EVAL")
     host: str = Field(default="127.0.0.1", alias="AGENT_GRAPH_HOST")
     port: int = Field(default=8000, alias="AGENT_GRAPH_PORT")
     cors_origins: str = Field(
