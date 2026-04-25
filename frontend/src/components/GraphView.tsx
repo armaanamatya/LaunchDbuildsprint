@@ -1,15 +1,33 @@
 import {
   Controls,
   MarkerType,
+  MiniMap,
   ReactFlow,
   ReactFlowProvider,
   type Edge,
+  type Node as RfNode,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import dagre from "dagre";
 import { useMemo } from "react";
-import type { GraphSnapshot } from "../types";
+import type { GraphNode, GraphSnapshot, NodeStatus } from "../types";
+import { AnimatedEdge } from "./edges/AnimatedEdge";
 import { WorktreeNode, type WorktreeFlowNode } from "./WorktreeNode";
+
+function statusColor(status: NodeStatus): string {
+  switch (status) {
+    case "running":
+    case "queued":
+      return "#d8492e"; // accent
+    case "completed":
+    case "merged":
+      return "#4f7942"; // success
+    case "failed":
+      return "#a02e2e"; // danger
+    default:
+      return "#6b6960"; // ink-muted
+  }
+}
 
 type GraphViewProps = {
   graph: GraphSnapshot;
@@ -19,6 +37,10 @@ type GraphViewProps = {
 
 const nodeTypes = {
   worktree: WorktreeNode,
+};
+
+const edgeTypes = {
+  animated: AnimatedEdge,
 };
 
 const NODE_WIDTH = 300;
@@ -89,7 +111,7 @@ export function GraphView({ graph, selectedNodeId, onSelectNode }: GraphViewProp
         source: edge.source,
         target: edge.target,
         animated: isActive,
-        type: "smoothstep",
+        type: isActive ? "animated" : "smoothstep",
         markerEnd: {
           type: MarkerType.ArrowClosed,
           color: stroke,
@@ -112,6 +134,7 @@ export function GraphView({ graph, selectedNodeId, onSelectNode }: GraphViewProp
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           fitView
           fitViewOptions={{ padding: 0.25, duration: 500 }}
           minZoom={0.4}
@@ -120,6 +143,24 @@ export function GraphView({ graph, selectedNodeId, onSelectNode }: GraphViewProp
           proOptions={{ hideAttribution: true }}
         >
           <Controls showInteractive={false} />
+          {graph.nodes.length >= 4 ? (
+            <MiniMap
+              pannable
+              zoomable
+              ariaLabel="Graph minimap"
+              maskColor="rgba(245, 241, 232, 0.7)"
+              nodeColor={(n: RfNode) => statusColor((n.data as GraphNode).status)}
+              nodeStrokeColor="rgba(26,26,29,0.22)"
+              nodeStrokeWidth={2}
+              nodeBorderRadius={3}
+              style={{
+                background: "var(--color-surface)",
+                border: "1px solid var(--color-line)",
+                borderRadius: 8,
+                boxShadow: "0 1px 0 rgba(26,26,29,0.05), 0 12px 32px rgba(26,26,29,0.08)",
+              }}
+            />
+          ) : null}
         </ReactFlow>
       </div>
     </ReactFlowProvider>

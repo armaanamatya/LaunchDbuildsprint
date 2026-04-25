@@ -6,7 +6,9 @@ import {
   fetchDiff as apiFetchDiff,
   fetchGraph,
   mergeBranch as apiMergeBranch,
+  resetDemo as apiResetDemo,
   runNode as apiRunNode,
+  spawnTriple as apiSpawnTriple,
 } from "../api/graph";
 import { applyEvent, type GraphState } from "./applyEvent";
 import type { GraphEvent, GraphNode, GraphSnapshot } from "../types";
@@ -36,6 +38,7 @@ type Store = GraphState & {
   ingest: (event: GraphEvent) => void;
   // async actions
   createBranch: (label: string, prompt: string) => Promise<GraphNode | null>;
+  spawnTriple: (prompt: string) => Promise<void>;
   runBranch: (nodeId: string) => Promise<void>;
   deleteBranch: (nodeId: string) => Promise<void>;
   mergeBranch: (nodeId: string) => Promise<void>;
@@ -202,6 +205,44 @@ export const useGraphStore = create<Store>((set, get) => ({
     }
   },
 
+  spawnTriple: async (prompt) => {
+    const root = get().graph.nodes.find((n) => n.parent_id === null);
+    if (!root) {
+      get().pushToast("error", "No root node — cannot spawn branches.");
+      return;
+    }
+    try {
+      const result = await apiSpawnTriple({
+        parent_id: root.id,
+        prompt,
+        label_prefix: "Approach",
+        auto_run: true,
+      });
+      // Optimistic insert; SSE node.created events for these dedupe by id.
+      set((s) => {
+        const newNodes = result.nodes.filter(
+          (n) => !s.graph.nodes.some((x) => x.id === n.id),
+        );
+        const newEdges = newNodes.map((n) => ({
+          id: `${root.id}->${n.id}`,
+          source: root.id,
+          target: n.id,
+        }));
+        return {
+          graph: {
+            ...s.graph,
+            nodes: [...s.graph.nodes, ...newNodes],
+            edges: [...s.graph.edges, ...newEdges],
+          },
+          selectedNodeId: result.nodes[0]?.id ?? s.selectedNodeId,
+        };
+      });
+      get().pushToast("success", `Spawned ${result.nodes.length} branches.`);
+    } catch (err) {
+      get().pushToast("error", apiErrorMessage(err, "Could not spawn branches"));
+    }
+  },
+
   runBranch: async (nodeId) => {
     try {
       await apiRunNode(nodeId);
@@ -225,6 +266,11 @@ export const useGraphStore = create<Store>((set, get) => ({
     try {
       const result = await apiMergeBranch(nodeId);
       get().pushToast("success", result.message || "Merged.");
+      // Decisive: clicking Pick-this-one in the compare panel returns the user
+      // to the canvas instead of leaving them in a stale comparison view.
+      if (get().compare.open) {
+        set(() => ({ compare: { open: false, nodeIds: [] } }));
+      }
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         get().pushToast("error", "Merge conflict — resolve manually then retry.");
@@ -246,15 +292,23 @@ export const useGraphStore = create<Store>((set, get) => ({
   },
 
   resetDemo: async () => {
-    const nonRoot = get().graph.nodes.filter((n) => n.parent_id !== null);
-    for (const node of nonRoot) {
-      try {
-        await apiDeleteNode(node.id);
-      } catch {
-        /* ignore — UI will reconcile from SSE */
-      }
+    try {
+      const result = await apiResetDemo();
+      // Optimistic clear. The demo.reset SSE event reaches the reducer too,
+      // which is idempotent — running both is safe.
+      set((s) => {
+        const root = s.graph.nodes.find((n) => n.parent_id === null);
+        return {
+          graph: { ...s.graph, nodes: root ? [root] : [], edges: [] },
+          agentLogs: {},
+          diffs: {},
+          selectedNodeId: root?.id ?? "root",
+        };
+      });
+      get().pushToast("info", result.message || "Demo reset.");
+    } catch (err) {
+      get().pushToast("error", apiErrorMessage(err, "Could not reset demo"));
     }
-    get().pushToast("info", "Demo reset.");
   },
 
   toggleCompareNode: (nodeId) => {
@@ -266,7 +320,23 @@ export const useGraphStore = create<Store>((set, get) => ({
       return { compare: { ...s.compare, nodeIds } };
     });
   },
-  openCompare: () => set((s) => ({ compare: { ...s.compare, open: true } })),
+  openCompare: () =>
+    set((s) => {
+      // Auto-include all completed/merged branches (cap at 3) so the user
+      // doesn't manually click each one. Manual selection wins if any exists.
+      if (s.compare.nodeIds.length > 0) {
+        return { compare: { ...s.compare, open: true } };
+      }
+      const ready = s.graph.nodes
+        .filter(
+          (n) =>
+            n.parent_id !== null &&
+            (n.status === "completed" || n.status === "merged"),
+        )
+        .slice(0, 3)
+        .map((n) => n.id);
+      return { compare: { open: true, nodeIds: ready } };
+    }),
   closeCompare: () => set((s) => ({ compare: { ...s.compare, open: false } })),
 
   pushToast: (kind, message) => {
@@ -282,4 +352,3 @@ function apiErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error) return `${fallback}: ${err.message}`;
   return fallback;
 }
-
