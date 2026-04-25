@@ -45,3 +45,14 @@ Thumbs.db
 Desktop.ini
 .idea/
 .vscode/
+
+# Local agent worktrees created during demo runs
+demo-repo/.agent-worktrees/
+
+# Local working notes / scratch
+.codex
+analysis.md
+plan2_current.md
+docs/active-change-critique.md
+docs/plan-personB.md
+docs/skill-implement.md
