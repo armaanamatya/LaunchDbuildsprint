@@ -26,6 +26,7 @@ type Store = GraphState & {
   isLoading: boolean;
   loadError: string | null;
   connection: ConnectionStatus;
+  hasEverConnected: boolean;
   compare: CompareMode;
   toasts: Toast[];
   // selectors / mutators
@@ -83,6 +84,7 @@ export const useGraphStore = create<Store>((set, get) => ({
   isLoading: false,
   loadError: null,
   connection: "connecting",
+  hasEverConnected: false,
   compare: { open: false, nodeIds: [] },
   toasts: [],
 
@@ -106,7 +108,11 @@ export const useGraphStore = create<Store>((set, get) => ({
 
   selectNode: (nodeId) => set({ selectedNodeId: nodeId }),
 
-  setConnection: (connection) => set({ connection }),
+  setConnection: (connection) =>
+    set((s) => ({
+      connection,
+      hasEverConnected: s.hasEverConnected || connection === "open",
+    })),
 
   ingest: (event) => {
     set((s) => applyEvent(
@@ -125,31 +131,70 @@ export const useGraphStore = create<Store>((set, get) => ({
       get().pushToast("error", "No root node — cannot create branch.");
       return null;
     }
+    // Provisional node so the canvas reflects the action immediately. If the
+    // POST fails we remove it — no phantom branches that can never run.
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const provisional: GraphNode = {
+      id: tempId,
+      label,
+      status: "idle",
+      branch_name: `agent/${tempId}`,
+      worktree_path: "(provisional)",
+      parent_id: root.id,
+      prompt: prompt || null,
+      summary: null,
+      strategy: null,
+      eval_passed: null,
+      eval_failed: null,
+      eval_summary: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    set((s) => ({
+      graph: {
+        ...s.graph,
+        nodes: [...s.graph.nodes, provisional],
+        edges: [
+          ...s.graph.edges,
+          { id: `${root.id}->${tempId}`, source: root.id, target: tempId },
+        ],
+      },
+      selectedNodeId: tempId,
+    }));
+
     try {
       const node = await apiCreateNode({
         label,
         parent_id: root.id,
         prompt: prompt || null,
       });
-      // Optimistic insert; SSE node.created will be ignored as duplicate.
       set((s) => ({
         graph: {
           ...s.graph,
-          nodes: s.graph.nodes.some((n) => n.id === node.id)
-            ? s.graph.nodes
-            : [...s.graph.nodes, node],
-          edges: s.graph.edges.some((e) => e.target === node.id)
-            ? s.graph.edges
-            : [
-                ...s.graph.edges,
-                { id: `${root.id}->${node.id}`, source: root.id, target: node.id },
-              ],
+          nodes: s.graph.nodes
+            .filter((n) => n.id !== tempId)
+            .concat(s.graph.nodes.some((n) => n.id === node.id) ? [] : [node]),
+          edges: s.graph.edges
+            .filter((e) => e.target !== tempId)
+            .concat(
+              s.graph.edges.some((e) => e.target === node.id)
+                ? []
+                : [{ id: `${root.id}->${node.id}`, source: root.id, target: node.id }],
+            ),
         },
         selectedNodeId: node.id,
       }));
       get().pushToast("success", `Branch ${node.branch_name} created.`);
       return node;
     } catch (err) {
+      set((s) => ({
+        graph: {
+          ...s.graph,
+          nodes: s.graph.nodes.filter((n) => n.id !== tempId),
+          edges: s.graph.edges.filter((e) => e.target !== tempId),
+        },
+        selectedNodeId: s.selectedNodeId === tempId ? root.id : s.selectedNodeId,
+      }));
       get().pushToast("error", apiErrorMessage(err, "Could not create branch"));
       return null;
     }

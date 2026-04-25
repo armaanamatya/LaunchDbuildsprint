@@ -1,6 +1,9 @@
 import type {
+  BranchTripleRequest,
+  BranchTripleResponse,
   CreateNodeRequest,
   DeleteNodeResponse,
+  DemoResetResponse,
   DiffResponse,
   GraphNode,
   GraphSnapshot,
@@ -72,4 +75,15 @@ export async function fetchDiff(nodeId: string): Promise<DiffResponse> {
 
 export async function mergeBranch(nodeId: string): Promise<MergeResponse> {
   return request<MergeResponse>(`/api/v1/nodes/${nodeId}/merge`, { method: "POST" });
+}
+
+export async function spawnTriple(payload: BranchTripleRequest): Promise<BranchTripleResponse> {
+  return request<BranchTripleResponse>("/api/v1/branches/triple", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function resetDemo(): Promise<DemoResetResponse> {
+  return request<DemoResetResponse>("/api/v1/demo/reset", { method: "POST" });
 }

@@ -1,13 +1,15 @@
-import { startTransition, useEffect, useState } from "react";
+import { startTransition, useEffect, useMemo, useState } from "react";
 import { ComparePanel } from "./components/ComparePanel";
 import { ConnectionIndicator } from "./components/ConnectionIndicator";
 import { CreateBranchModal } from "./components/CreateBranchModal";
 import { DetailPanel } from "./components/DetailPanel";
 import { EmptyStateCTA } from "./components/EmptyStateCTA";
 import { GraphView } from "./components/GraphView";
+import { KeyboardShortcutsOverlay } from "./components/KeyboardShortcutsOverlay";
 import { Toolbar } from "./components/Toolbar";
 import { ToastHost } from "./components/Toast";
 import { useGraphSSE } from "./hooks/useGraphSSE";
+import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useGraphStore } from "./store/graphStore";
 
 const HERO_PROMPT = `Add rate limiting to POST /api/login in the demo repo.
@@ -26,10 +28,13 @@ export function App() {
   const loadGraph = useGraphStore((s) => s.loadGraph);
   const selectNode = useGraphStore((s) => s.selectNode);
   const createBranch = useGraphStore((s) => s.createBranch);
+  const runBranch = useGraphStore((s) => s.runBranch);
+  const mergeBranch = useGraphStore((s) => s.mergeBranch);
   const openCompare = useGraphStore((s) => s.openCompare);
   const resetDemo = useGraphStore((s) => s.resetDemo);
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   const handleCreate = async (label: string, prompt: string) => {
     await createBranch(label, prompt);
@@ -45,8 +50,10 @@ export function App() {
 
   const branchCount = graph.nodes.filter((n) => n.parent_id !== null).length;
   const isEmpty = branchCount === 0;
-  const selectedNode =
-    graph.nodes.find((node) => node.id === selectedNodeId) ?? graph.nodes[0];
+  const selectedNode = useMemo(
+    () => graph.nodes.find((node) => node.id === selectedNodeId) ?? graph.nodes[0],
+    [graph.nodes, selectedNodeId],
+  );
   const showDetailPanel = !isEmpty && selectedNode && selectedNode.parent_id !== null;
   const activeNodeCount = graph.nodes.filter(
     (node) => node.status === "queued" || node.status === "running",
@@ -62,11 +69,29 @@ export function App() {
     });
   }, [loadGraph]);
 
+  useKeyboardShortcuts({
+    onNewBranch: () => setCreateOpen(true),
+    onRunSelected: () => {
+      if (selectedNode && selectedNode.parent_id !== null) {
+        void runBranch(selectedNode.id);
+      }
+    },
+    onCompare: () => {
+      if (completedNodeCount >= 2) openCompare();
+    },
+    onMergeSelected: () => {
+      if (selectedNode && selectedNode.status === "completed") {
+        void mergeBranch(selectedNode.id);
+      }
+    },
+    onShowShortcuts: () => setShortcutsOpen(true),
+  });
+
   return (
-    <div className="min-h-screen bg-[#050607] text-white">
+    <div className="min-h-screen bg-paper text-ink">
       <main className="relative min-h-screen overflow-hidden">
         {isEmpty ? (
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_38%,rgba(255,186,92,0.08),transparent_55%),linear-gradient(180deg,#050607,#050607)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_28%,rgba(216,73,46,0.06),transparent_55%)]" />
         ) : (
           <GraphView
             graph={graph}
@@ -123,6 +148,7 @@ export function App() {
           onClose={() => setCreateOpen(false)}
         />
         <ComparePanel />
+        <KeyboardShortcutsOverlay open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
         <ToastHost />
       </main>
     </div>
@@ -131,7 +157,7 @@ export function App() {
 
 function Stat({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-full border border-white/10 bg-black/35 px-3 py-2 text-[11px] font-medium text-white/70 backdrop-blur-xl">
+    <div className="rounded-sm border border-line bg-surface px-3 py-1.5 font-mono text-[10.5px] font-medium uppercase tracking-eyebrow text-ink-muted shadow-panel">
       {children}
     </div>
   );

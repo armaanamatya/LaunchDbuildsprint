@@ -170,11 +170,19 @@ async def run_node_task(
     worktree_path: str,
     strategy: NodeStrategy | None = None,
 ) -> None:
-    """Background coroutine: drives the agent, publishes events, updates node status."""
+    """Background coroutine: drives the agent, publishes events, updates node status.
+
+    Wrapped in a wall-clock budget (``AGENT_GRAPH_MAX_RUN_SECONDS``). When the
+    budget is exhausted the inner stream is cancelled — the cancellation
+    handler still publishes ``agent.failed`` and marks the node failed, but
+    we tag the event with ``timed_out: True`` so the UI can phrase the
+    failure precisely instead of saying "cancelled".
+    """
     from .agent_runner import get_runner
 
     settings = get_settings()
     runner = get_runner()
+    timeout_seconds = max(30, settings.max_run_seconds)
 
     async def _emit(graph_event: GraphEvent) -> None:
         """Publish to live SSE subscribers and append to the per-node trace.
@@ -185,7 +193,7 @@ async def run_node_task(
         await event_bus.publish(graph_event)
         audit_log.write(worktree_path, graph_event)
 
-    try:
+    async def _drive() -> None:
         async for event in runner.stream(node_id, prompt, worktree_path, strategy):
             graph_event_type = _NORMALIZED_TO_GRAPH.get(event.type, "agent.text")
             data = {
@@ -237,21 +245,38 @@ async def run_node_task(
                             )
                         )
                 except Exception as diff_exc:
-                    logger.warning("Could not compute diff for node %s after completion: %s", node_id, diff_exc)
+                    logger.warning("diff_unavailable node=%s reason=%s", node_id, diff_exc)
 
                 # Best-effort eval — runs in the same task so completion is observable.
                 if settings.enable_eval:
                     try:
                         await _run_eval(node_id, worktree_path)
                     except Exception as eval_exc:
-                        logger.warning("Eval skipped for node %s: %s", node_id, eval_exc)
+                        logger.warning("eval_skipped node=%s reason=%s", node_id, eval_exc)
 
             elif event.type == "agent_failed":
                 await graph_state.update_node_status(node_id, "failed")
 
+    try:
+        await asyncio.wait_for(_drive(), timeout=timeout_seconds)
+
+    except asyncio.TimeoutError:
+        logger.warning("agent_timeout node=%s after=%ss", node_id, timeout_seconds)
+        await graph_state.update_node_status(node_id, "failed")
+        await _emit(
+            GraphEvent(
+                type="agent.failed",
+                node_id=node_id,
+                data={
+                    "error": f"Agent run exceeded {timeout_seconds}s and was cancelled.",
+                    "timed_out": True,
+                },
+            )
+        )
+
     except asyncio.CancelledError as exc:
         reason = (str(exc) if exc.args else "") or "Run cancelled"
-        logger.info("Run task cancelled for node %s (%s)", node_id, reason)
+        logger.info("agent_cancelled node=%s reason=%s", node_id, reason)
         await graph_state.update_node_status(node_id, "failed")
         await _emit(
             GraphEvent(
@@ -263,7 +288,7 @@ async def run_node_task(
         raise
 
     except Exception as exc:
-        logger.error("run_node_task unhandled error for node %s: %s", node_id, exc, exc_info=True)
+        logger.error("agent_unhandled_error node=%s err=%s", node_id, exc, exc_info=True)
         await graph_state.update_node_status(node_id, "failed")
         await _emit(
             GraphEvent(

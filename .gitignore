@@ -56,3 +56,8 @@ plan2_current.md
 docs/active-change-critique.md
 docs/plan-personB.md
 docs/skill-implement.md
+docs/superpowers/
+
+# Tooling caches / scratch screenshots at repo root
+.playwright-mcp/
+/*.png
