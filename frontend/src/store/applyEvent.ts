@@ -166,6 +166,42 @@ export function applyEvent(state: GraphState, event: GraphEvent): GraphState {
       };
     }
 
+    // stored on the node so compare panel reads it without a refetch
+    case "node.eval_ready": {
+      const id = event.node_id;
+      if (!id) return state;
+      const data = event.data ?? {};
+      const passed = typeof data.passed === "number" ? data.passed : null;
+      const failed = typeof data.failed === "number" ? data.failed : null;
+      const summary = typeof data.summary === "string" ? data.summary : null;
+      return {
+        ...state,
+        graph: {
+          ...state.graph,
+          nodes: state.graph.nodes.map((n) =>
+            n.id === id
+              ? { ...n, eval_passed: passed, eval_failed: failed, eval_summary: summary }
+              : n,
+          ),
+        },
+      };
+    }
+
+    // keeps state consistent if the SSE event arrives before resetDemo's response
+    case "demo.reset": {
+      const root = state.graph.nodes.find((n) => n.parent_id === null);
+      return {
+        ...state,
+        graph: {
+          ...state.graph,
+          nodes: root ? [root] : [],
+          edges: [],
+        },
+        agentLogs: {},
+        diffs: {},
+      };
+    }
+
     default: {
       const _exhaustive: never = event.type;
       void _exhaustive;

@@ -125,3 +125,43 @@ describe("applyEvent", () => {
     expect(after).toEqual(before);
   });
 });
+
+describe("node.eval_ready", () => {
+  it("stores eval counts on the node", () => {
+    let state = baseState();
+    state = applyEvent(
+      state,
+      event("node.created", { node: { ...node("n1"), strategy: "middleware" } }),
+    );
+    state = applyEvent(
+      state,
+      event(
+        "node.eval_ready",
+        { passed: 4, failed: 0, summary: "all rate-limit tests pass" },
+        "n1",
+      ),
+    );
+    const n = state.graph.nodes.find((n) => n.id === "n1")!;
+    expect(n.eval_passed).toBe(4);
+    expect(n.eval_failed).toBe(0);
+    expect(n.eval_summary).toBe("all rate-limit tests pass");
+  });
+});
+
+describe("demo.reset", () => {
+  it("wipes everything except the root node", () => {
+    let state = baseState();
+    state = applyEvent(state, event("node.created", { node: node("a") }));
+    state = applyEvent(state, event("node.created", { node: node("b") }));
+    state = applyEvent(state, event("agent.text", { content: "hello" }, "a"));
+    state = applyEvent(
+      state,
+      event("node.diff_ready", { has_changes: true, diff_preview: "+ x" }, "a"),
+    );
+    state = applyEvent(state, event("demo.reset", {}));
+    expect(state.graph.nodes.map((n) => n.id)).toEqual(["root"]);
+    expect(state.graph.edges).toEqual([]);
+    expect(state.agentLogs).toEqual({});
+    expect(state.diffs).toEqual({});
+  });
+});
