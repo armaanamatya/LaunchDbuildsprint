@@ -11,9 +11,13 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.2.8",
+    "@fontsource/jetbrains-mono": "^5.2.8",
     "@xyflow/react": "^12.9.0",
     "dagre": "^0.8.5",
+    "lucide-react": "^1.11.0",
     "react": "^18.3.1",
+    "react-diff-viewer-continued": "^4.2.2",
     "react-dom": "^18.3.1",
     "zustand": "^5.0.8"
   },
