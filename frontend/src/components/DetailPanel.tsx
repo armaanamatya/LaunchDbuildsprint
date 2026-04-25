@@ -2,19 +2,17 @@ import { useState } from "react";
 import { AgentLogPanel } from "./AgentLogPanel";
 import { DiffPanel } from "./DiffPanel";
 import { StatusBadge } from "./StatusBadge";
+import { StrategyChip } from "./StrategyBadge";
 import { useGraphStore } from "../store/graphStore";
 import type { AgentLogEntry, GraphNode } from "../types";
 
 type Tab = "overview" | "logs" | "diff";
 
-// Stable empty array. Returning `?? []` from a Zustand selector creates a
-// fresh array reference each call, which useSyncExternalStore reads as a
-// changed snapshot and triggers an infinite re-render loop.
 const EMPTY_LOGS: AgentLogEntry[] = [];
 
 function compactPath(path: string) {
   const segments = path.split(/[/\\]+/).filter(Boolean);
-  return segments.length <= 3 ? path : `.../${segments.slice(-3).join("/")}`;
+  return segments.length <= 3 ? path : `…/${segments.slice(-3).join("/")}`;
 }
 
 function formatTimestamp(value: string) {
@@ -38,77 +36,59 @@ export function DetailPanel({ node }: { node: GraphNode }) {
   const compare = useGraphStore((s) => s.compare);
 
   const isRoot = node.parent_id === null;
-  const canRun = !isRoot && (node.status === "idle" || node.status === "queued");
+  const canRun = !isRoot && (node.status === "idle" || node.status === "failed");
   const canMerge = node.status === "completed";
   const canDelete = !isRoot && node.status !== "running";
   const inCompare = compare.nodeIds.includes(node.id);
+  const evalReady = node.eval_passed !== null && node.eval_passed !== undefined;
 
   return (
-    <aside className="pointer-events-auto w-full max-w-[26rem] rounded-[2rem] border border-white/10 bg-[#0d0f11]/88 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.48)] backdrop-blur-2xl">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/35">
-        Selected branch
-      </p>
+    <aside className="pointer-events-auto w-full max-w-[26rem] rounded-lg border border-line bg-surface p-5 shadow-panel-lg">
+      <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-eyebrow text-ink-soft">
+        <span>Selected branch</span>
+        {node.strategy ? <StrategyChip strategy={node.strategy} /> : null}
+      </div>
 
-      <div className="mt-4 flex items-start justify-between gap-4">
+      <div className="mt-3 flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="font-display text-[1.7rem] font-semibold tracking-[-0.03em] text-white">
+          <h1 className="font-display text-[1.7rem] font-medium leading-tight tracking-[-0.025em] text-ink">
             {node.label}
           </h1>
-          <p className="mt-1 truncate text-sm text-white/45">{node.branch_name}</p>
+          <p className="mt-0.5 truncate font-mono text-[12px] text-ink-muted">{node.branch_name}</p>
         </div>
         <StatusBadge status={node.status} />
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => void runBranch(node.id)}
-          disabled={!canRun}
-          className="rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-sky-100 hover:bg-sky-400/20 disabled:opacity-40"
-        >
+      <div className="mt-4 flex flex-wrap gap-1.5">
+        <ActionButton kind="primary" onClick={() => void runBranch(node.id)} disabled={!canRun}>
           Run
-        </button>
-        <button
-          type="button"
-          onClick={() => void mergeBranch(node.id)}
-          disabled={!canMerge}
-          className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-100 hover:bg-emerald-400/20 disabled:opacity-40"
-        >
+        </ActionButton>
+        <ActionButton kind="success" onClick={() => void mergeBranch(node.id)} disabled={!canMerge}>
           Merge
-        </button>
-        <button
-          type="button"
+        </ActionButton>
+        <ActionButton
+          kind={inCompare ? "active" : "default"}
           onClick={() => toggleCompareNode(node.id)}
           disabled={isRoot || node.status !== "completed"}
-          className={`rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] disabled:opacity-40 ${
-            inCompare
-              ? "border-amber-400/40 bg-amber-400/15 text-amber-100"
-              : "border-white/10 bg-white/[0.04] text-white/70 hover:bg-white/[0.08]"
-          }`}
         >
           {inCompare ? "In compare" : "Add to compare"}
-        </button>
-        <button
-          type="button"
-          onClick={() => void deleteBranch(node.id)}
-          disabled={!canDelete}
-          className="rounded-full border border-rose-400/30 bg-rose-400/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-rose-100 hover:bg-rose-400/20 disabled:opacity-40"
-        >
+        </ActionButton>
+        <ActionButton kind="danger" onClick={() => void deleteBranch(node.id)} disabled={!canDelete}>
           Delete
-        </button>
+        </ActionButton>
       </div>
 
-      <div className="mt-5 flex gap-1 rounded-full border border-white/8 bg-white/[0.03] p-1">
+      <div className="mt-5 inline-flex rounded-sm border border-line bg-paper-deep p-0.5">
         {(["overview", "logs", "diff"] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setTab(t)}
-            className={`flex-1 rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] ${
-              tab === t ? "bg-white/10 text-white" : "text-white/55 hover:text-white/80"
+            className={`rounded-sm px-3 py-1 font-mono text-[10.5px] font-medium uppercase tracking-eyebrow transition ${
+              tab === t ? "bg-surface text-ink shadow-panel" : "text-ink-muted hover:text-ink"
             }`}
           >
-            {t === "logs" ? `Logs${logs.length ? ` (${logs.length})` : ""}` : t}
+            {t === "logs" ? `Logs${logs.length ? ` ${logs.length}` : ""}` : t}
           </button>
         ))}
       </div>
@@ -116,13 +96,31 @@ export function DetailPanel({ node }: { node: GraphNode }) {
       <div className="mt-4">
         {tab === "overview" ? (
           <div className="space-y-4">
-            <p className="text-sm leading-6 text-white/72">
+            <p className="text-[13px] leading-6 text-ink">
               {node.prompt ?? node.summary ?? "Prepared for a new implementation path."}
             </p>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-2 sm:grid-cols-2">
               <Tile label="Worktree" value={compactPath(node.worktree_path)} />
               <Tile label="Last update" value={formatTimestamp(node.updated_at)} />
             </div>
+            {evalReady ? (
+              <div className="rounded-sm border border-line bg-paper-deep p-3">
+                <p className="font-mono text-[10px] uppercase tracking-eyebrow text-ink-soft">
+                  Eval
+                </p>
+                <p className="mt-1 font-mono text-[12.5px] text-ink">
+                  <span className="text-[color:var(--color-success)]">
+                    ✓ {node.eval_passed} passed
+                  </span>
+                  {node.eval_failed && node.eval_failed > 0 ? (
+                    <span className="ml-2 text-danger">✗ {node.eval_failed} failed</span>
+                  ) : null}
+                </p>
+                {node.eval_summary ? (
+                  <p className="mt-1 text-[12px] text-ink-muted">{node.eval_summary}</p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
 
@@ -133,16 +131,43 @@ export function DetailPanel({ node }: { node: GraphNode }) {
   );
 }
 
+function ActionButton({
+  kind,
+  onClick,
+  disabled,
+  children,
+}: {
+  kind: "primary" | "success" | "danger" | "active" | "default";
+  onClick: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  const tone = {
+    primary: "border-[color:var(--color-accent)] bg-accent-soft text-accent-strong hover:bg-accent hover:text-white",
+    success: "border-[color:var(--color-success)]/30 bg-success-soft text-[color:var(--color-success)] hover:bg-[color:var(--color-success)] hover:text-white",
+    danger: "border-[color:var(--color-danger)]/30 bg-danger-soft text-danger hover:bg-[color:var(--color-danger)] hover:text-white",
+    active: "border-[color:var(--color-accent)] bg-accent text-white",
+    default: "border-line bg-surface text-ink-muted hover:bg-paper-deep hover:text-ink",
+  }[kind];
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`rounded-sm border px-2.5 py-1 font-mono text-[10.5px] font-medium uppercase tracking-eyebrow transition disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-current ${tone}`}
+    >
+      {children}
+    </button>
+  );
+}
+
 function Tile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-2xl border border-white/8 bg-white/[0.03] p-3">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/35">
+    <div className="min-w-0 rounded-sm border border-line bg-paper-deep p-3">
+      <p className="font-mono text-[10px] uppercase tracking-eyebrow text-ink-soft">
         {label}
       </p>
-      <p
-        className="mt-2 truncate text-sm leading-6 text-white/72"
-        title={value}
-      >
+      <p className="mt-1 truncate text-[13px] leading-5 text-ink" title={value}>
         {value}
       </p>
     </div>

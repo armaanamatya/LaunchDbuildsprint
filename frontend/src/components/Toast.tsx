@@ -1,9 +1,9 @@
 import { useGraphStore } from "../store/graphStore";
 
 const KIND_TONE = {
-  info: "border-white/10 bg-[#0d0f11] text-white/85",
-  success: "border-emerald-400/30 bg-emerald-400/10 text-emerald-100",
-  error: "border-rose-400/30 bg-rose-400/10 text-rose-100",
+  info:    "border-line bg-surface text-ink",
+  success: "border-[color:var(--color-success)]/30 bg-success-soft text-success",
+  error:   "border-[color:var(--color-danger)]/30 bg-danger-soft text-danger",
 } as const;
 
 export function ToastHost() {
@@ -14,7 +14,7 @@ export function ToastHost() {
       {toasts.map((t) => (
         <div
           key={t.id}
-          className={`pointer-events-auto max-w-sm rounded-xl border px-4 py-3 text-sm shadow-[0_18px_50px_rgba(0,0,0,0.5)] ${KIND_TONE[t.kind]}`}
+          className={`pointer-events-auto max-w-sm cursor-pointer rounded-md border px-4 py-3 text-sm shadow-panel-lg ${KIND_TONE[t.kind]}`}
           onClick={() => dismiss(t.id)}
         >
           {t.message}

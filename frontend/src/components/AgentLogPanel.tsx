@@ -3,13 +3,13 @@ import type { AgentLogEntry } from "../types";
 
 type Props = { entries: AgentLogEntry[] };
 
-const TYPE_TONE: Record<AgentLogEntry["type"], string> = {
-  started: "border-sky-400/20 bg-sky-400/10 text-sky-100",
-  text: "border-white/10 bg-white/[0.04] text-white/85",
-  tool_use: "border-amber-300/20 bg-amber-300/10 text-amber-100",
-  tool_result: "border-emerald-300/20 bg-emerald-300/10 text-emerald-100",
-  completed: "border-emerald-400/30 bg-emerald-400/15 text-emerald-100",
-  failed: "border-rose-400/30 bg-rose-400/15 text-rose-100",
+const TYPE_TONE: Record<AgentLogEntry["type"], { stripe: string; tag: string }> = {
+  started:     { stripe: "bg-accent",                                 tag: "text-accent" },
+  text:        { stripe: "bg-line-strong",                            tag: "text-ink-muted" },
+  tool_use:    { stripe: "bg-[color:var(--strategy-route-local)]",    tag: "text-[color:var(--strategy-route-local)]" },
+  tool_result: { stripe: "bg-[color:var(--color-success)]",           tag: "text-[color:var(--color-success)]" },
+  completed:   { stripe: "bg-[color:var(--color-success)]",           tag: "text-[color:var(--color-success)]" },
+  failed:      { stripe: "bg-danger",                                 tag: "text-danger" },
 };
 
 const TYPE_LABEL: Record<AgentLogEntry["type"], string> = {
@@ -29,14 +29,14 @@ export function AgentLogPanel({ entries }: Props) {
 
   if (entries.length === 0) {
     return (
-      <p className="text-sm text-white/45">
+      <p className="font-mono text-[12px] text-ink-soft">
         No activity yet. Run this branch to start an agent session.
       </p>
     );
   }
 
   return (
-    <div ref={ref} className="max-h-[340px] space-y-2 overflow-y-auto pr-1">
+    <div ref={ref} className="max-h-[360px] space-y-1.5 overflow-y-auto pr-1">
       {entries.map((e) => (
         <LogRow key={e.id} entry={e} />
       ))}
@@ -46,20 +46,29 @@ export function AgentLogPanel({ entries }: Props) {
 
 function LogRow({ entry }: { entry: AgentLogEntry }) {
   const tone = TYPE_TONE[entry.type];
+  const time = new Date(entry.timestamp).toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+
   return (
-    <div className={`rounded-xl border px-3 py-2 ${tone}`}>
-      <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.18em] opacity-70">
-        <span>{TYPE_LABEL[entry.type]}</span>
-        <span>{new Date(entry.timestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}</span>
+    <div className="relative rounded-sm border border-line bg-surface pl-3 pr-3 py-2">
+      <span className={`pointer-events-none absolute inset-y-1.5 left-0 w-[3px] rounded-r-sm ${tone.stripe}`} />
+      <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-eyebrow">
+        <span className={tone.tag}>{TYPE_LABEL[entry.type]}</span>
+        <span className="tabular-num text-ink-soft">{time}</span>
       </div>
       {entry.tool_name ? (
-        <p className="mt-1 font-mono text-[12px] leading-5 text-white/80">
-          {entry.tool_name}
-          {entry.tool_input ? <span className="text-white/50"> {JSON.stringify(entry.tool_input).slice(0, 140)}</span> : null}
+        <p className="mt-1 font-mono text-[12px] leading-5 text-ink">
+          <span className="text-ink-muted">›</span> {entry.tool_name}
+          {entry.tool_input ? (
+            <span className="text-ink-muted"> {JSON.stringify(entry.tool_input).slice(0, 140)}</span>
+          ) : null}
         </p>
       ) : null}
       {entry.content ? (
-        <p className="mt-1 whitespace-pre-wrap font-mono text-[12px] leading-5">
+        <p className="mt-1 whitespace-pre-wrap text-[12.5px] leading-5 text-ink">
           {entry.content}
         </p>
       ) : null}

@@ -18,53 +18,71 @@ export function Toolbar({
   showAdvancedActions,
 }: ToolbarProps) {
   return (
-    <div className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-full border border-white/10 bg-[#0d0f11]/82 px-3 py-2 shadow-[0_18px_60px_rgba(0,0,0,0.42)] backdrop-blur-2xl">
-      <div className="flex items-center gap-2 pl-1 pr-2">
-        <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_18px_rgba(74,222,128,0.65)]" />
-        <p className="font-display text-base font-semibold tracking-[-0.02em] text-white">
+    <div className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 shadow-panel">
+      <div className="flex items-center gap-2 pl-1 pr-1">
+        <span className="font-display text-[1.4rem] leading-none text-accent" aria-hidden>
+          ⌐
+        </span>
+        <p className="font-display text-[1.05rem] font-medium tracking-[-0.015em] text-ink">
           Agent Graph
         </p>
-        <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/60">
+        <span className="ml-1 rounded-sm border border-line bg-paper-deep px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-eyebrow text-ink-muted">
           {baseBranch}
         </span>
       </div>
 
       {showAdvancedActions && (
         <>
-          <div className="hidden h-5 w-px bg-white/10 sm:block" />
-          <button
-            type="button"
-            onClick={onQuickStart}
-            className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/75 hover:bg-white/[0.08]"
-            title="Spawn 3 branches with the locked hero prompt"
-          >
+          <div className="hidden h-5 w-px bg-line sm:block" />
+          <ToolbarButton onClick={onQuickStart} title="Spawn 3 branches with the locked hero prompt">
             Quick start ×3
-          </button>
-          <button
-            type="button"
-            onClick={onOpenCompare}
-            disabled={!canCompare}
-            className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/75 hover:bg-white/[0.08] disabled:opacity-40"
-          >
+          </ToolbarButton>
+          <ToolbarButton onClick={onOpenCompare} disabled={!canCompare}>
             Compare
-          </button>
-          <button
-            type="button"
-            onClick={onReset}
-            className="rounded-full border border-rose-400/25 bg-rose-400/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-100 hover:bg-rose-400/15"
-          >
+          </ToolbarButton>
+          <ToolbarButton onClick={onReset} variant="danger">
             Reset
-          </button>
+          </ToolbarButton>
         </>
       )}
 
       <button
         type="button"
         onClick={onOpenCreate}
-        className="rounded-full border border-amber-400/30 bg-[linear-gradient(180deg,rgba(251,191,36,0.18),rgba(251,191,36,0.08))] px-4 py-1.5 text-sm font-semibold text-amber-50 transition duration-150 hover:border-amber-300/50 hover:bg-[linear-gradient(180deg,rgba(251,191,36,0.24),rgba(251,191,36,0.12))]"
+        className="rounded-sm border border-[color:var(--color-accent)] bg-accent px-3 py-1 font-mono text-[11px] font-medium uppercase tracking-eyebrow text-white transition hover:bg-accent-strong"
       >
         + New branch
       </button>
     </div>
+  );
+}
+
+function ToolbarButton({
+  onClick,
+  disabled,
+  title,
+  variant = "default",
+  children,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  title?: string;
+  variant?: "default" | "danger";
+  children: React.ReactNode;
+}) {
+  const tone =
+    variant === "danger"
+      ? "border-[color:var(--color-danger)]/30 bg-danger-soft text-danger hover:bg-[color:var(--color-danger)] hover:text-white"
+      : "border-line bg-surface text-ink-muted hover:bg-paper-deep hover:text-ink";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={`rounded-sm border px-2.5 py-1 font-mono text-[10.5px] font-medium uppercase tracking-eyebrow transition disabled:opacity-40 ${tone}`}
+    >
+      {children}
+    </button>
   );
 }

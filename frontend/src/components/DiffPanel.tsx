@@ -15,19 +15,17 @@ export function DiffPanel({ nodeId }: Props) {
   }, [nodeId, diff, refreshDiff]);
 
   if (nodeId === "root") {
-    return <p className="text-sm text-white/45">Root branch — no diff.</p>;
+    return <p className="font-mono text-[12px] text-ink-soft">Root branch — no diff.</p>;
   }
-
   if (!diff) {
-    return <p className="text-sm text-white/45">Loading diff…</p>;
+    return <p className="font-mono text-[12px] text-ink-soft">Loading diff…</p>;
   }
-
   if (!diff.has_changes) {
-    return <p className="text-sm text-white/45">No changes yet on this branch.</p>;
+    return <p className="font-mono text-[12px] text-ink-soft">No changes yet on this branch.</p>;
   }
 
   return (
-    <div className="max-h-[420px]">
+    <div className="max-h-[440px]">
       <UnifiedDiffView diff={diff.diff} />
     </div>
   );

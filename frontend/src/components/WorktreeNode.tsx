@@ -1,97 +1,141 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import type { GraphNode } from "../types";
+import type { AgentLogEntry, GraphNode } from "../types";
 import { useGraphStore } from "../store/graphStore";
 import { StatusBadge } from "./StatusBadge";
+import { StrategyAvatar } from "./StrategyBadge";
 
 export type WorktreeFlowNode = Node<GraphNode, "worktree">;
 
-function compactPath(path: string) {
-  const segments = path.split(/[/\\]+/).filter(Boolean);
-  return segments.length <= 2 ? path : `.../${segments.slice(-2).join("/")}`;
+const EMPTY_LOGS: AgentLogEntry[] = [];
+
+function lastToolUse(logs: AgentLogEntry[]): AgentLogEntry | null {
+  for (let i = logs.length - 1; i >= 0; i--) {
+    if (logs[i].type === "tool_use") return logs[i];
+  }
+  return null;
+}
+
+function summarizeTool(entry: AgentLogEntry): string {
+  const name = entry.tool_name ?? "tool";
+  const input = entry.tool_input ?? {};
+  const target =
+    (typeof input.file_path === "string" && input.file_path) ||
+    (typeof input.path === "string" && input.path) ||
+    (typeof input.command === "string" && input.command) ||
+    (typeof input.pattern === "string" && input.pattern) ||
+    "";
+  if (!target) return name;
+  const segments = target.split(/[/\\]+/).filter(Boolean);
+  const short = segments.length <= 2 ? target : segments.slice(-2).join("/");
+  return `${name} · ${short}`;
 }
 
 export function WorktreeNode({ data, selected }: NodeProps<WorktreeFlowNode>) {
   const runBranch = useGraphStore((s) => s.runBranch);
+  const logs = useGraphStore((s) => s.agentLogs[data.id] ?? EMPTY_LOGS);
   const isRoot = data.parent_id === null;
   const isRunning = data.status === "running";
-  const canRun = !isRoot && (data.status === "idle" || data.status === "queued");
+  const canRun = !isRoot && (data.status === "idle" || data.status === "failed");
+
+  const placeholder = isRoot
+    ? "Base workspace for the demo repository."
+    : "Awaiting prompt — define an implementation path.";
+
+  const ticker = isRunning ? lastToolUse(logs) : null;
+  const tickerLabel = ticker ? summarizeTool(ticker) : isRunning ? "Working…" : null;
+  const evalReady =
+    data.eval_passed !== null && data.eval_passed !== undefined;
 
   return (
     <div
-      className={`relative w-[340px] rounded-[1.35rem] border bg-[#151617]/96 p-5 shadow-[0_18px_55px_rgba(0,0,0,0.45)] backdrop-blur-xl transition duration-200 ${
+      className={`relative w-[300px] overflow-hidden rounded-md border bg-surface-raised shadow-panel transition duration-200 ${
         selected
-          ? "border-amber-300/45 bg-[#191a1c]/98 shadow-[0_0_0_1px_rgba(251,191,36,0.24),0_22px_70px_rgba(0,0,0,0.58)]"
-          : "border-white/8 hover:border-white/14"
+          ? "border-[color:var(--color-accent)] shadow-panel-lg"
+          : "border-line hover:border-line-strong hover:shadow-panel-lg"
       }`}
     >
-      {isRunning ? (
-        <span className="pointer-events-none absolute inset-0 rounded-[1.35rem] ring-2 ring-sky-400/35 animate-pulse" />
-      ) : null}
+      <div
+        className={`h-[3px] w-full ${
+          isRunning
+            ? "bg-accent"
+            : data.status === "completed"
+            ? "bg-success"
+            : data.status === "merged"
+            ? "bg-success"
+            : data.status === "failed"
+            ? "bg-danger"
+            : "bg-line-strong"
+        }`}
+      />
 
       <Handle
         type="target"
         position={Position.Top}
-        className="!h-2.5 !w-2.5 !border !border-white/20 !bg-[#0d0f11]"
+        className="!h-2 !w-2 !border !border-line-strong !bg-surface"
       />
 
-      <div className="flex items-start justify-between gap-3">
-        <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[10px] font-medium text-white/70">
-          {data.branch_name}
-        </span>
-        <StatusBadge status={data.status} />
-      </div>
-
-      <div className="mt-5 space-y-4">
-        <div>
-          <p className="font-display text-[1.08rem] font-semibold tracking-[-0.03em] text-white">
-            {data.label}
-          </p>
-          <p className="mt-3 text-sm leading-6 text-white/82">
-            {data.prompt ?? "Enter a prompt to explore another implementation path."}
-          </p>
-        </div>
-
-        <div className="h-px bg-white/8" />
-
-        <div className="rounded-2xl border border-white/8 bg-white/[0.025] px-3 py-2.5 text-[11px] text-white/62">
-          <div className="flex items-center justify-between gap-4">
-            <span className="truncate">{compactPath(data.worktree_path)}</span>
-            <span className="whitespace-nowrap text-white/38">
-              {new Date(data.updated_at).toLocaleTimeString([], {
-                hour: "numeric",
-                minute: "2-digit",
-              })}
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2">
+            {data.strategy ? <StrategyAvatar strategy={data.strategy} /> : null}
+            <span className="truncate font-mono text-[11px] text-ink-muted">
+              {data.branch_name}
             </span>
           </div>
+          <StatusBadge status={data.status} />
         </div>
 
-        <p className="min-h-[48px] text-[13px] leading-6 text-white/62">
-          {data.summary ?? "No execution summary yet."}
+        <p className="mt-3 font-display text-[1.1rem] font-medium leading-tight tracking-[-0.015em] text-ink">
+          {data.label}
         </p>
-      </div>
 
-      <div className="mt-5 flex items-center justify-between">
-        <span className="text-[11px] uppercase tracking-[0.22em] text-white/30">
-          {isRoot ? "Base workspace" : "Derived branch"}
-        </span>
-        {canRun ? (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              void runBranch(data.id);
-            }}
-            className="rounded-full border border-sky-400/35 bg-sky-400/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-100 hover:bg-sky-400/25"
-          >
-            Run
-          </button>
+        <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-5 text-ink-muted">
+          {data.prompt ?? placeholder}
+        </p>
+
+        {tickerLabel ? (
+          <p className="mt-3 truncate font-mono text-[11px] text-accent">
+            ↻ {tickerLabel}
+          </p>
         ) : null}
+
+        {evalReady ? (
+          <div className="mt-3 flex items-center gap-2 font-mono text-[11px] tabular-num text-ink-muted">
+            <span className="text-[color:var(--color-success)]">
+              ✓ {data.eval_passed} passed
+            </span>
+            {data.eval_failed && data.eval_failed > 0 ? (
+              <span className="text-danger">✗ {data.eval_failed} failed</span>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <span className="font-mono text-[10.5px] tabular-num text-ink-soft">
+            {new Date(data.updated_at).toLocaleTimeString([], {
+              hour: "numeric",
+              minute: "2-digit",
+            })}
+          </span>
+          {canRun ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                void runBranch(data.id);
+              }}
+              className="rounded-sm border border-[color:var(--color-accent)] bg-accent-soft px-2.5 py-0.5 font-mono text-[10.5px] font-medium uppercase tracking-eyebrow text-accent-strong transition hover:bg-accent hover:text-white"
+            >
+              Run
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <Handle
         type="source"
         position={Position.Bottom}
-        className="!h-2.5 !w-2.5 !border !border-white/20 !bg-[#0d0f11]"
+        className="!h-2 !w-2 !border !border-line-strong !bg-surface"
       />
     </div>
   );
