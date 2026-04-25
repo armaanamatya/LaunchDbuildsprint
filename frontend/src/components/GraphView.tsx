@@ -9,6 +9,7 @@ import "@xyflow/react/dist/style.css";
 import dagre from "dagre";
 import { useMemo } from "react";
 import type { GraphSnapshot } from "../types";
+import { AnimatedEdge } from "./edges/AnimatedEdge";
 import { WorktreeNode, type WorktreeFlowNode } from "./WorktreeNode";
 
 type GraphViewProps = {
@@ -19,6 +20,10 @@ type GraphViewProps = {
 
 const nodeTypes = {
   worktree: WorktreeNode,
+};
+
+const edgeTypes = {
+  animated: AnimatedEdge,
 };
 
 const NODE_WIDTH = 300;
@@ -89,7 +94,7 @@ export function GraphView({ graph, selectedNodeId, onSelectNode }: GraphViewProp
         source: edge.source,
         target: edge.target,
         animated: isActive,
-        type: "smoothstep",
+        type: isActive ? "animated" : "smoothstep",
         markerEnd: {
           type: MarkerType.ArrowClosed,
           color: stroke,
@@ -112,6 +117,7 @@ export function GraphView({ graph, selectedNodeId, onSelectNode }: GraphViewProp
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           fitView
           fitViewOptions={{ padding: 0.25, duration: 500 }}
           minZoom={0.4}
