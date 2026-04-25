@@ -31,6 +31,9 @@ module.exports = {
         "panel-lg": "0 1px 0 rgba(26, 26, 29, 0.05), 0 18px 44px rgba(26, 26, 29, 0.08)",
       },
       borderRadius: { DEFAULT: "6px", sm: "4px", md: "8px", lg: "12px", xl: "16px" },
+      letterSpacing: {
+        eyebrow: "0.16em",
+      },
     },
   },
   plugins: [],
