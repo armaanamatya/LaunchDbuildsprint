@@ -46,18 +46,24 @@ export function WorktreeNode({ data, selected }: NodeProps<WorktreeFlowNode>) {
   const evalReady =
     data.eval_passed !== null && data.eval_passed !== undefined;
 
+  const surfaceClass = selected
+    ? "bg-paper-deep border-line-strong"
+    : isRoot
+      ? "bg-paper-deep border-line hover:border-line-strong"
+      : "bg-surface-raised border-line hover:border-line-strong hover:shadow-panel-lg";
+
+  const selectedRing = selected
+    ? "shadow-[0_0_0_1.5px_rgba(216,73,46,0.22),0_1px_0_rgba(26,26,29,0.05),0_12px_32px_rgba(26,26,29,0.08)]"
+    : "shadow-panel";
+
   return (
     <div
-      className={`relative w-[300px] overflow-hidden rounded-md border bg-surface-raised shadow-panel transition duration-200 ${
-        selected
-          ? "border-[color:var(--color-accent)] shadow-panel-lg"
-          : "border-line hover:border-line-strong hover:shadow-panel-lg"
-      }`}
+      className={`relative w-[300px] overflow-hidden rounded-2xl border transition duration-200 ${surfaceClass} ${selectedRing}`}
     >
       <div
         className={`h-[3px] w-full ${
           isRunning
-            ? "bg-accent"
+            ? "bg-accent accent-pulse"
             : data.status === "completed"
             ? "bg-success"
             : data.status === "merged"
