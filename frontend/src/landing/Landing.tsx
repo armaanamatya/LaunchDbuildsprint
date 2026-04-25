@@ -58,7 +58,7 @@ function Hero() {
           <h1 className="mt-6 font-display text-[3.2rem] font-semibold leading-[0.98] tracking-[-0.035em] text-ink sm:text-[4.2rem] lg:text-[5rem]">
             One prompt.
             <br />
-            Three implementations.
+            N implementations.
             <br />
             <em className="font-semibold not-italic text-accent">One winner.</em>
           </h1>
