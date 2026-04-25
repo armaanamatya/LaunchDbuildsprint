@@ -103,6 +103,23 @@ async def test_status_not_ready_when_real_runs_enabled_without_key(
     assert any("ANTHROPIC_API_KEY" in issue for issue in payload["issues"])
 
 
+async def test_status_not_ready_when_eval_enabled_without_uv(
+    isolated_backend: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AGENT_GRAPH_ENABLE_EVAL", "true")
+    monkeypatch.setattr("app.api.shutil.which", lambda _name: None)
+    get_settings.cache_clear()
+
+    async with _client() as client:
+        response = await client.get("/api/v1/demo/status")
+
+    payload = response.json()
+    assert payload["enable_eval"] is True
+    assert payload["uv_on_path"] is False
+    assert payload["ready"] is False
+    assert any("uv" in issue.lower() for issue in payload["issues"])
+
+
 async def test_status_ready_when_real_runs_enabled_with_key(
     isolated_backend: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

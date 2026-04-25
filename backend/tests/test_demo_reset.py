@@ -47,6 +47,16 @@ def _git_stdout(args: list[str], cwd: Path) -> str:
     ).stdout
 
 
+def _git(args: list[str], cwd: Path) -> None:
+    subprocess.run(
+        ["git", *args],
+        cwd=str(cwd),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
 # ── happy path ─────────────────────────────────────────────────────────────────
 
 
@@ -93,6 +103,71 @@ async def test_demo_reset_cleans_worktrees_branches_and_state(isolated_backend: 
 
     porcelain = _git_stdout(["status", "--porcelain"], isolated_backend).strip()
     assert porcelain == "", f"working tree should be clean, got: {porcelain!r}"
+
+
+async def test_demo_reset_restores_stored_baseline_after_main_moves(
+    isolated_backend: Path,
+) -> None:
+    initial_head = _git_stdout(["rev-parse", "HEAD"], isolated_backend).strip()
+
+    async with _client() as client:
+        triple = await client.post(
+            "/api/v1/branches/triple",
+            json={"parent_id": "root", "prompt": "x", "auto_run": False},
+        )
+    assert triple.status_code == 200, triple.text
+
+    baseline = _git_stdout(
+        ["rev-parse", "refs/agent-graph/demo-baseline^{commit}"],
+        isolated_backend,
+    ).strip()
+    assert baseline == initial_head
+
+    marker = isolated_backend / "rate_limit.py"
+    marker.write_text("# simulated merged winner\n")
+    _git(["add", "rate_limit.py"], isolated_backend)
+    _git(["commit", "-m", "simulate merged winner on main"], isolated_backend)
+    assert _git_stdout(["rev-parse", "HEAD"], isolated_backend).strip() != initial_head
+
+    async with _client() as client:
+        reset = await client.post("/api/v1/demo/reset")
+    assert reset.status_code == 200, reset.text
+
+    assert _git_stdout(["rev-parse", "HEAD"], isolated_backend).strip() == initial_head
+    assert not marker.exists(), "reset must remove files introduced after the baseline"
+
+
+async def test_demo_reset_removes_untracked_dirty_files(isolated_backend: Path) -> None:
+    scratch = isolated_backend / "scratch.tmp"
+    scratch.write_text("untracked dirt\n")
+    assert "scratch.tmp" in _git_stdout(["status", "--porcelain"], isolated_backend)
+
+    async with _client() as client:
+        reset = await client.post("/api/v1/demo/reset")
+    assert reset.status_code == 200, reset.text
+
+    assert not scratch.exists()
+    assert _git_stdout(["status", "--porcelain"], isolated_backend).strip() == ""
+
+
+async def test_demo_reset_sweeps_stale_agent_branches_after_restart(
+    isolated_backend: Path,
+) -> None:
+    async with _client() as client:
+        triple = await client.post(
+            "/api/v1/branches/triple",
+            json={"parent_id": "root", "prompt": "x", "auto_run": False},
+        )
+    assert triple.status_code == 200, triple.text
+    assert _git_stdout(["branch", "--list", "agent/*"], isolated_backend).strip()
+
+    graph_state.reset_for_tests()
+
+    async with _client() as client:
+        reset = await client.post("/api/v1/demo/reset")
+    assert reset.status_code == 200, reset.text
+
+    assert _git_stdout(["branch", "--list", "agent/*"], isolated_backend).strip() == ""
 
 
 # ── idempotency ────────────────────────────────────────────────────────────────

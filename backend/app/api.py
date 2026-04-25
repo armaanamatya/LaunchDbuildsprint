@@ -162,6 +162,7 @@ async def create_branch_triple(request: BranchTripleRequest) -> BranchTripleResp
     if parent is None:
         raise HTTPException(status_code=404, detail="Parent node not found")
 
+    settings = get_settings()
     if request.auto_run and settings.enable_real_runs and not settings.anthropic_api_key:
         raise HTTPException(
             status_code=400,
