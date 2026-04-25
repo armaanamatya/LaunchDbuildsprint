@@ -112,7 +112,7 @@ cd backend
 uv run pytest -v
 ```
 
-Expected: **75 passed, 1 skipped** (the “1 skipped” is the gated Claude smoke
+Expected: **76 passed, 1 skipped** (the “1 skipped” is the gated Claude smoke
 test unless `ANTHROPIC_API_KEY` AND `AGENT_GRAPH_RUN_REAL_SMOKE` are both set).
 
 Real Claude smoke (optional):

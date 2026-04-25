@@ -1,6 +1,6 @@
 # Person 2 Final Handoff
 
-Updated: 2026-04-25 16:53:28 CDT (-0500)
+Updated: 2026-04-25 16:57:19 CDT (-0500)
 
 Audience: users, demo operators, and future agents working on the Person 2
 backend/git/agent-runtime slice.
@@ -106,21 +106,14 @@ Commands run during review:
 
 ```bash
 cd backend
-uv run pytest tests/test_branch_triple.py tests/test_task_manager_cancellation.py -q
-# 7 passed
+uv run pytest tests/test_demo_reset.py tests/test_demo_status.py -q
+# 14 passed in 7.24s
 
-uv run pytest tests/test_mock_strategies.py tests/test_demo_reset.py tests/test_demo_status.py tests/test_worktree_service.py -q
-# 39 passed
+uv run pytest -q
+# 76 passed, 1 skipped in 53.59s
 ```
 
-Expected full backend command:
-
-```bash
-cd backend
-uv run pytest -v
-```
-
-`tests/test_claude_runner_smoke.py` is expected to skip unless both
+The skipped test is expected: `tests/test_claude_runner_smoke.py` runs only if
 `ANTHROPIC_API_KEY` and `AGENT_GRAPH_RUN_REAL_SMOKE` are set.
 
 ## Review Items Resolved
