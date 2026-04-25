@@ -36,6 +36,10 @@ class EventBus:
             for queue in stale_queues:
                 self._connections.discard(queue)
 
+    def reset_for_tests(self) -> None:
+        """Drop all queue subscribers. Test-only."""
+        self._connections.clear()
+
 
 async def sse_stream(queue: asyncio.Queue[str]) -> AsyncGenerator[str, None]:
     try:

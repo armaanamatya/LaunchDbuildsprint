@@ -16,6 +16,9 @@ dev = [
     "httpx>=0.28.0",
     "pytest>=8.3.0",
     "anyio[trio]>=4.0.0",
+    # Demo-repo's create_app imports Jinja2Templates at module load, so the
+    # mock-strategy end-to-end tests need jinja2 in the backend test env.
+    "jinja2>=3.1.4",
 ]
 
 [tool.pytest.ini_options]

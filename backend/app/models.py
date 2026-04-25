@@ -7,6 +7,7 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 
 NodeStatus = Literal["idle", "queued", "running", "completed", "failed", "merged"]
+NodeStrategy = Literal["route_local", "dependency", "middleware"]
 GraphEventType = Literal[
     # Graph lifecycle
     "graph.connected",
@@ -16,6 +17,8 @@ GraphEventType = Literal[
     "node.run_queued",
     "node.merged",
     "node.diff_ready",
+    "node.eval_ready",
+    "demo.reset",
     # Agent lifecycle
     "agent.started",
     "agent.text",
@@ -41,6 +44,10 @@ class GraphNode(BaseModel):
     parent_id: str | None = None
     prompt: str | None = None
     summary: str | None = None
+    strategy: NodeStrategy | None = None
+    eval_passed: int | None = None
+    eval_failed: int | None = None
+    eval_summary: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 
@@ -74,6 +81,53 @@ class CreateNodeRequest(BaseModel):
     label: str
     parent_id: str
     prompt: str | None = None
+    strategy: NodeStrategy | None = None
+
+
+class BranchTripleRequest(BaseModel):
+    """Spawn three sibling branches from one parent, one per strategy."""
+
+    parent_id: str
+    prompt: str
+    label_prefix: str = "Approach"
+    auto_run: bool = True
+
+
+class BranchTripleResponse(BaseModel):
+    nodes: list["GraphNode"]
+
+
+class DemoResetResponse(BaseModel):
+    reset: bool
+    removed_worktrees: int
+    removed_branches: int
+    demo_repo_reset: bool
+    message: str
+
+
+class DemoStatusResponse(BaseModel):
+    """One-call answer to ‘is the backend ready for the demo?’
+
+    ``ready`` is true only when *every* prerequisite is satisfied AND the
+    backend is in a fresh state (no running tasks, no leaked worktrees).
+    ``issues`` is the actionable, human-readable list of blockers — empty
+    when ``ready`` is true.
+    """
+
+    ready: bool
+    demo_repo_path: str | None
+    demo_repo_exists: bool
+    demo_repo_is_git: bool
+    base_branch: str
+    base_branch_clean: bool
+    worktree_root: str
+    active_worktrees: int
+    enable_real_runs: bool
+    anthropic_api_key_present: bool
+    enable_eval: bool
+    uv_on_path: bool
+    running_tasks: int
+    issues: list[str]
 
 
 class DeleteNodeResponse(BaseModel):
@@ -118,3 +172,6 @@ class RunNodeResponse(BaseModel):
     node_id: str
     status: NodeStatus
     message: str
+
+
+BranchTripleResponse.model_rebuild()
