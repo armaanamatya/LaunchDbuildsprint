@@ -1,5 +1,5 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import type { AgentLogEntry, GraphNode } from "../types";
+import type { AgentLogEntry, GraphNode, NodeStrategy } from "../types";
 import { useGraphStore } from "../store/graphStore";
 import { StatusBadge } from "./StatusBadge";
 import { StrategyAvatar } from "./StrategyBadge";
@@ -7,6 +7,14 @@ import { StrategyAvatar } from "./StrategyBadge";
 export type WorktreeFlowNode = Node<GraphNode, "worktree">;
 
 const EMPTY_LOGS: AgentLogEntry[] = [];
+
+const ROOT_DESCRIPTION = "Clean demo baseline. All agent approaches branch from here.";
+
+const STRATEGY_DESCRIPTIONS: Record<NodeStrategy, string> = {
+  route_local: "Route-local: checks the login limit inside the POST /api/login flow.",
+  dependency: "Dependency: enforces the limit with a FastAPI Depends hook.",
+  middleware: "Middleware: intercepts POST /api/login before the handler runs.",
+};
 
 function lastToolUse(logs: AgentLogEntry[]): AgentLogEntry | null {
   for (let i = logs.length - 1; i >= 0; i--) {
@@ -38,8 +46,11 @@ export function WorktreeNode({ data, selected }: NodeProps<WorktreeFlowNode>) {
   const canRun = !isRoot && (data.status === "idle" || data.status === "failed");
 
   const placeholder = isRoot
-    ? "Base workspace for the demo repository."
+    ? ROOT_DESCRIPTION
     : "Awaiting prompt — define an implementation path.";
+  const description = data.strategy
+    ? STRATEGY_DESCRIPTIONS[data.strategy]
+    : data.prompt ?? placeholder;
 
   const ticker = isRunning ? lastToolUse(logs) : null;
   const tickerLabel = ticker ? summarizeTool(ticker) : isRunning ? "Working…" : null;
@@ -96,7 +107,7 @@ export function WorktreeNode({ data, selected }: NodeProps<WorktreeFlowNode>) {
         </p>
 
         <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-5 text-ink-muted">
-          {data.prompt ?? placeholder}
+          {description}
         </p>
 
         {tickerLabel ? (
