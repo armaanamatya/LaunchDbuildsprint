@@ -49,16 +49,9 @@ Desktop.ini
 # Local agent worktrees created during demo runs
 demo-repo/.agent-worktrees/
 
-# Local working notes / scratch
-.codex
-analysis.md
-plan2_current.md
-docs/active-change-critique.md
-docs/plan-personB.md
-docs/skill-implement.md
-docs/superpowers/
-
-# Tooling caches / scratch screenshots at repo root
+# Tooling caches / scratch
+.codex/
 .playwright-mcp/
-/*.png
 .superpowers/
+docs/superpowers/
+/*.png
