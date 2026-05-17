@@ -55,3 +55,7 @@ demo-repo/.agent-worktrees/
 .superpowers/
 docs/superpowers/
 /*.png
+
+# Agent run artifacts (created at runtime)
+.agent-graph/
+agent_notes.md
