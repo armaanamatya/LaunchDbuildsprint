@@ -8,6 +8,31 @@ export type NodeStatus =
 
 export type NodeStrategy = "route_local" | "dependency" | "middleware";
 
+export type SummaryRisk = "low" | "medium" | "high" | "unknown";
+
+export type SummaryRecommendation =
+  | "merge_candidate"
+  | "needs_review"
+  | "do_not_merge";
+
+export interface NodeDecisionSummary {
+  version: number;
+  headline: string;
+  approach: string;
+  changed_files: string[];
+  files_changed: number;
+  insertions: number;
+  deletions: number;
+  tests_passed: number | null;
+  tests_failed: number | null;
+  test_summary: string | null;
+  risk: SummaryRisk;
+  risk_reason: string;
+  recommendation: SummaryRecommendation;
+  review_focus: string[];
+  generated_at: string;
+}
+
 export type GraphEventType =
   // Graph lifecycle
   | "graph.connected"
@@ -18,6 +43,7 @@ export type GraphEventType =
   | "node.merged"
   | "node.diff_ready"
   | "node.eval_ready"
+  | "node.summary_ready"
   | "demo.reset"
   // Agent lifecycle
   | "agent.started"
@@ -42,6 +68,7 @@ export interface GraphNode extends Record<string, unknown> {
   eval_passed: number | null;
   eval_failed: number | null;
   eval_summary: string | null;
+  decision_summary: NodeDecisionSummary | null;
   created_at: string;
   updated_at: string;
 }

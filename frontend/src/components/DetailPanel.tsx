@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { AgentLogPanel } from "./AgentLogPanel";
 import { DiffPanel } from "./DiffPanel";
+import { NodeSummaryCard } from "./NodeSummaryCard";
 import { StatusBadge } from "./StatusBadge";
 import { StrategyChip } from "./StrategyBadge";
 import { useGraphStore } from "../store/graphStore";
@@ -153,6 +154,7 @@ export function DetailPanel({
               <p className="text-[13px] leading-6 text-ink">
                 {node.prompt ?? node.summary ?? "Prepared for a new implementation path."}
               </p>
+              {!isRoot ? <NodeSummaryCard node={node} /> : null}
               {evalReady ? (
                 <div className="rounded-lg border border-line bg-paper p-3">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-soft">

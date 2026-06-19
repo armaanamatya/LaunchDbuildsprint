@@ -261,6 +261,26 @@ class WorktreeService:
             deletions=deletions,
         )
 
+    def get_changed_files(
+        self,
+        base_branch: str,
+        branch_name: str,
+        repo_path: Path | str | None = None,
+    ) -> list[str]:
+        """Return paths of files changed between *base_branch* and *branch_name*.
+
+        Uses ``git diff --name-only`` so renames and binary files are handled
+        by git itself. Returns an empty list if the diff cannot be computed.
+        """
+        repo = self._get_repo_path(repo_path)
+        try:
+            result = _run_git(
+                ["diff", "--name-only", f"{base_branch}...{branch_name}"], repo
+            )
+        except WorktreeError:
+            return []
+        return [line for line in result.stdout.splitlines() if line.strip()]
+
     def merge_branch(
         self,
         branch_name: str,

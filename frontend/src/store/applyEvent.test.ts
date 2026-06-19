@@ -15,6 +15,7 @@ const node = (id: string, status: GraphNode["status"] = "idle"): GraphNode => ({
   eval_passed: null,
   eval_failed: null,
   eval_summary: null,
+  decision_summary: null,
   created_at: "2026-04-25T00:00:00Z",
   updated_at: "2026-04-25T00:00:00Z",
 });
